@@ -1,12 +1,17 @@
 -- ============================================================
 -- CRM Onboarding Platform — PostgreSQL Schema
--- Includes: webhooks, DocuSeal integration
+-- Multi-tenant: businesses, admin invites, journey builder,
+-- webhooks, DocuSeal integration
+--
+-- Safe to re-run: every statement is idempotent (IF NOT EXISTS /
+-- ON CONFLICT DO NOTHING), so this can run as a deploy step on every
+-- release without erroring on an already-migrated database.
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ── Businesses (tenants) ────────────────────────────────────────
-CREATE TABLE businesses (
+CREATE TABLE IF NOT EXISTS businesses (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name         TEXT NOT NULL,
   slug         TEXT UNIQUE NOT NULL,
@@ -16,7 +21,7 @@ CREATE TABLE businesses (
 -- ── Users ────────────────────────────────────────────────────
 -- role: 'owner' created the business account; 'admin' was invited by an
 -- owner/admin; 'client' is an end user (client/volunteer/etc.) being onboarded.
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   business_id  UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   email        TEXT NOT NULL,
@@ -30,12 +35,12 @@ CREATE TABLE users (
 
 -- Emails are unique per-business (not globally) since the same person could
 -- be a client of one business and an admin of another.
-CREATE UNIQUE INDEX idx_users_email_global_owner_admin ON users(email) WHERE role IN ('owner','admin');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_global_owner_admin ON users(email) WHERE role IN ('owner','admin');
 
 -- ── Invites ──────────────────────────────────────────────────
 -- Admins invite other admins (owner only) or clients (owner/admin) via a
 -- unique token link. Client invites can optionally pre-assign a journey.
-CREATE TABLE invites (
+CREATE TABLE IF NOT EXISTS invites (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   business_id  UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   email        TEXT NOT NULL,
@@ -51,7 +56,7 @@ CREATE TABLE invites (
 );
 
 -- ── Journeys ─────────────────────────────────────────────────
-CREATE TABLE journeys (
+CREATE TABLE IF NOT EXISTS journeys (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   business_id  UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
@@ -62,12 +67,18 @@ CREATE TABLE journeys (
 );
 
 -- invites.journey_id references journeys, which is defined after invites —
--- add the FK now that both tables exist.
-ALTER TABLE invites ADD CONSTRAINT fk_invites_journey
-  FOREIGN KEY (journey_id) REFERENCES journeys(id) ON DELETE SET NULL;
+-- add the FK now that both tables exist (guarded: ADD CONSTRAINT has no
+-- IF NOT EXISTS in Postgres, so check pg_constraint first).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_invites_journey') THEN
+    ALTER TABLE invites ADD CONSTRAINT fk_invites_journey
+      FOREIGN KEY (journey_id) REFERENCES journeys(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- ── Sections ─────────────────────────────────────────────────
-CREATE TABLE sections (
+CREATE TABLE IF NOT EXISTS sections (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   journey_id   UUID NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
   title        TEXT NOT NULL,
@@ -76,7 +87,7 @@ CREATE TABLE sections (
 );
 
 -- ── Tasks ─────────────────────────────────────────────────────
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   section_id            UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   title                 TEXT NOT NULL,
@@ -91,7 +102,7 @@ CREATE TABLE tasks (
 );
 
 -- ── Client Journey Assignments ────────────────────────────────
-CREATE TABLE client_journeys (
+CREATE TABLE IF NOT EXISTS client_journeys (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   client_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   journey_id   UUID NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
@@ -102,7 +113,7 @@ CREATE TABLE client_journeys (
 );
 
 -- ── Task Completions ──────────────────────────────────────────
-CREATE TABLE task_completions (
+CREATE TABLE IF NOT EXISTS task_completions (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   client_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   task_id      UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -111,7 +122,7 @@ CREATE TABLE task_completions (
 );
 
 -- ── DocuSeal Submissions ──────────────────────────────────────
-CREATE TABLE docuseal_submissions (
+CREATE TABLE IF NOT EXISTS docuseal_submissions (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   client_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   task_id             UUID REFERENCES tasks(id) ON DELETE SET NULL,
@@ -124,7 +135,7 @@ CREATE TABLE docuseal_submissions (
 );
 
 -- ── Webhook Endpoints (registered by admin) ───────────────────
-CREATE TABLE webhook_endpoints (
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   url         TEXT NOT NULL,
@@ -136,7 +147,7 @@ CREATE TABLE webhook_endpoints (
 );
 
 -- ── Webhook Delivery Log ──────────────────────────────────────
-CREATE TABLE webhook_deliveries (
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   endpoint_id     UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
   event           TEXT NOT NULL,
@@ -148,20 +159,20 @@ CREATE TABLE webhook_deliveries (
 );
 
 -- ── Indexes ───────────────────────────────────────────────────
-CREATE INDEX idx_sections_journey    ON sections(journey_id);
-CREATE INDEX idx_tasks_section       ON tasks(section_id);
-CREATE INDEX idx_cj_client           ON client_journeys(client_id);
-CREATE INDEX idx_cj_journey          ON client_journeys(journey_id);
-CREATE INDEX idx_tc_client           ON task_completions(client_id);
-CREATE INDEX idx_tc_task             ON task_completions(task_id);
-CREATE INDEX idx_ds_client           ON docuseal_submissions(client_id);
-CREATE INDEX idx_wd_endpoint         ON webhook_deliveries(endpoint_id);
-CREATE INDEX idx_users_business      ON users(business_id);
-CREATE INDEX idx_journeys_business   ON journeys(business_id);
-CREATE INDEX idx_webhooks_business   ON webhook_endpoints(business_id);
-CREATE INDEX idx_invites_business    ON invites(business_id);
-CREATE INDEX idx_invites_token       ON invites(token);
-CREATE INDEX idx_invites_email       ON invites(business_id, email) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_sections_journey    ON sections(journey_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_section       ON tasks(section_id);
+CREATE INDEX IF NOT EXISTS idx_cj_client           ON client_journeys(client_id);
+CREATE INDEX IF NOT EXISTS idx_cj_journey          ON client_journeys(journey_id);
+CREATE INDEX IF NOT EXISTS idx_tc_client           ON task_completions(client_id);
+CREATE INDEX IF NOT EXISTS idx_tc_task             ON task_completions(task_id);
+CREATE INDEX IF NOT EXISTS idx_ds_client           ON docuseal_submissions(client_id);
+CREATE INDEX IF NOT EXISTS idx_wd_endpoint         ON webhook_deliveries(endpoint_id);
+CREATE INDEX IF NOT EXISTS idx_users_business      ON users(business_id);
+CREATE INDEX IF NOT EXISTS idx_journeys_business   ON journeys(business_id);
+CREATE INDEX IF NOT EXISTS idx_webhooks_business   ON webhook_endpoints(business_id);
+CREATE INDEX IF NOT EXISTS idx_invites_business    ON invites(business_id);
+CREATE INDEX IF NOT EXISTS idx_invites_token       ON invites(token);
+CREATE INDEX IF NOT EXISTS idx_invites_email       ON invites(business_id, email) WHERE status = 'pending';
 
 -- ── Seed: demo business + owner ─────────────────────────────────
 -- Sign in at the admin portal with: admin@example.com / admin1234
@@ -170,7 +181,7 @@ INSERT INTO businesses (id, name, slug) VALUES (
   '00000000-0000-0000-0000-000000000001',
   'Acme Onboarding',
   'acme-onboarding'
-);
+) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (business_id, email, password, name, role) VALUES (
   '00000000-0000-0000-0000-000000000001',
@@ -178,4 +189,4 @@ INSERT INTO users (business_id, email, password, name, role) VALUES (
   '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.',
   'Admin User',
   'owner'
-);
+) ON CONFLICT (business_id, email) DO NOTHING;
