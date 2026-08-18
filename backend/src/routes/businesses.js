@@ -20,11 +20,40 @@ router.get('/me', auth(['owner', 'admin']), async (req, res) => {
   res.json(rows[0]);
 });
 
-// PUT /businesses/me — rename business (owner only)
+// PUT /businesses/me — update business profile (owner only)
+// Accepts any subset of: name, logo_url, accent_color, auto_archive_days, weekly_digest_enabled
 router.put('/me', auth('owner'), async (req, res) => {
-  const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
-  const { rows } = await pool.query('UPDATE businesses SET name=$1 WHERE id=$2 RETURNING *', [name.trim(), req.user.business_id]);
+  const { name, logo_url, accent_color, auto_archive_days, weekly_digest_enabled } = req.body;
+
+  const sets = [];
+  const params = [];
+  let i = 1;
+
+  if (name !== undefined) {
+    if (!name.trim()) return res.status(400).json({ error: 'name cannot be blank' });
+    sets.push(`name=$${i++}`); params.push(name.trim());
+  }
+  if (logo_url !== undefined) {
+    if (logo_url && !/^https?:\/\//i.test(logo_url)) return res.status(400).json({ error: 'logo_url must be a valid http(s) URL' });
+    sets.push(`logo_url=$${i++}`); params.push(logo_url || null);
+  }
+  if (accent_color !== undefined) {
+    if (accent_color && !/^#[0-9a-f]{6}$/i.test(accent_color)) return res.status(400).json({ error: 'accent_color must be a hex color like #5b4fd6' });
+    sets.push(`accent_color=$${i++}`); params.push(accent_color || '#5b4fd6');
+  }
+  if (auto_archive_days !== undefined) {
+    if (auto_archive_days !== null && (!Number.isInteger(auto_archive_days) || auto_archive_days < 1)) {
+      return res.status(400).json({ error: 'auto_archive_days must be a positive integer or null' });
+    }
+    sets.push(`auto_archive_days=$${i++}`); params.push(auto_archive_days);
+  }
+  if (weekly_digest_enabled !== undefined) {
+    sets.push(`weekly_digest_enabled=$${i++}`); params.push(!!weekly_digest_enabled);
+  }
+
+  if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+  params.push(req.user.business_id);
+  const { rows } = await pool.query(`UPDATE businesses SET ${sets.join(', ')} WHERE id=$${i} RETURNING *`, params);
   res.json(rows[0]);
 });
 

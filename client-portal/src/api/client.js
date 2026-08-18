@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://api.easyonboardings.com' : 'http://localhost:4000');
 const token = () => localStorage.getItem('crm_client_token');
 async function req(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {

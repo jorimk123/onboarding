@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast } from '../main';
 
@@ -11,6 +12,7 @@ export default function ClientsPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [search, setSearch] = useState('');
   const toast = useToast();
+  const nav = useNavigate();
 
   const load = () => {
     setLoading(true);
@@ -33,12 +35,12 @@ export default function ClientsPage() {
   );
 
   return (
-    <div className="page">
+    <div className="page" style={{ paddingTop: 0 }}>
       <div className="page-header">
-        <div><div className="page-title">Clients</div><div style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{clients.length} registered</div></div>
+        <div style={{ color: 'var(--text2)', fontSize: 13 }}>{clients.length} registered</div>
         <button className="btn btn-primary" onClick={() => setShowInvite(true)}>+ Invite client</button>
       </div>
-      <input placeholder="Search clients…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 340, marginBottom: 16 }} />
+      <input placeholder="Search people…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 340, marginBottom: 16 }} />
 
       {invites.length > 0 && (
         <div className="card" style={{ padding: 0, marginBottom: 20 }}>
@@ -67,17 +69,17 @@ export default function ClientsPage() {
           {filtered.map(client => (
             <div key={client.id} className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-                <div style={{ display: 'flex', gap: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--purple-light)', color: 'var(--purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => nav(`/clients/${client.id}`)}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--purple-light)', color: 'var(--purple-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0 }}>
                     {client.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{client.name}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{client.name}</div>
                     <div style={{ color: 'var(--text2)', fontSize: 13 }}>{client.email}</div>
                     {client.company && <div style={{ color: 'var(--text3)', fontSize: 12 }}>{client.company}</div>}
                   </div>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => setAssignModal(client)}>+ Assign journey</button>
+                <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); setAssignModal(client); }}>+ Assign journey</button>
               </div>
 
               {client.journeys?.length > 0 && (

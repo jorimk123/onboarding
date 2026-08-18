@@ -16,25 +16,25 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      <header style={{ background: 'white', borderBottom: '1px solid var(--border)', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header style={{ background: 'linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.6))', backdropFilter: 'var(--blur-sm)', WebkitBackdropFilter: 'var(--blur-sm)', border: '1px solid rgba(255,255,255,.55)', borderRadius: 22, margin: '16px 16px 0', padding: '0 22px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 16, zIndex: 10, boxShadow: 'var(--shadow-glass-sm)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700 }}>✓</div>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>{user?.business?.name || 'Onboarding Portal'}</span>
+          <div style={{ width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(150deg,var(--purple-mid),var(--purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, boxShadow: '0 2px 8px rgba(91,79,214,.4)' }}>✓</div>
+          <span style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--text-strong)' }}>{user?.business?.name || 'Onboarding Portal'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <span style={{ fontSize: 13, color: 'var(--text2)' }}>Hi, {user?.name?.split(' ')[0]}</span>
           <button className="btn btn-secondary btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '36px 24px' }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Your onboarding</h1>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 24px 40px' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 4, color: 'var(--text)' }}>Your onboarding</h1>
         <p style={{ color: 'var(--text2)', fontSize: 15, marginBottom: 28 }}>Complete each step to finish your onboarding journey.</p>
 
         {!loading && journeys.length > 0 && (
           <div className="card" style={{ padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
               <svg width="64" height="64" viewBox="0 0 64 64">
-                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--border)" strokeWidth="6" />
+                <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(15,26,23,.1)" strokeWidth="6" />
                 <circle cx="32" cy="32" r="26" fill="none" stroke="var(--teal)" strokeWidth="6"
                   strokeDasharray={`${2 * Math.PI * 26}`}
                   strokeDashoffset={`${2 * Math.PI * 26 * (1 - pct / 100)}`}

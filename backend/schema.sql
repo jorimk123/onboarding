@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS businesses (
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Branding + policy columns (added post-launch; guarded so this stays
+-- idempotent against databases that already have them).
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS accent_color TEXT DEFAULT '#5b4fd6';
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS auto_archive_days INT;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS weekly_digest_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS last_digest_sent_at TIMESTAMPTZ;
+
 -- ── Users ────────────────────────────────────────────────────
 -- role: 'owner' created the business account; 'admin' was invited by an
 -- owner/admin; 'client' is an end user (client/volunteer/etc.) being onboarded.
@@ -109,8 +117,10 @@ CREATE TABLE IF NOT EXISTS client_journeys (
   assigned_by  UUID REFERENCES users(id) ON DELETE SET NULL,
   assigned_at  TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
+  archived_at  TIMESTAMPTZ,
   UNIQUE(client_id, journey_id)
 );
+ALTER TABLE client_journeys ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 -- ── Task Completions ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS task_completions (

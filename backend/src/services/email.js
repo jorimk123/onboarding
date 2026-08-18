@@ -46,4 +46,21 @@ async function sendClientInviteEmail({ to, businessName, link }) {
   });
 }
 
-module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail };
+async function sendWeeklyDigestEmail({ to, businessName, inProgressCount, completedThisWeek, stalledNames }) {
+  if (!process.env.RESEND_API_KEY) { console.log(`[email] (dev) weekly digest for ${to} skipped — RESEND_API_KEY not set`); return; }
+  const stalledHtml = stalledNames.length
+    ? `<p><strong>No activity in 7+ days:</strong> ${stalledNames.join(', ')}</p>`
+    : '';
+  await resend.emails.send({
+    from: FROM, to,
+    subject: `Your weekly onboarding digest — ${businessName}`,
+    html: `<p>Hi,</p><p>Here's what happened this week at <strong>${businessName}</strong>:</p>
+      <ul>
+        <li>${inProgressCount} people currently in progress</li>
+        <li>${completedThisWeek} completed a journey this week</li>
+      </ul>
+      ${stalledHtml}`,
+  });
+}
+
+module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail, sendWeeklyDigestEmail };

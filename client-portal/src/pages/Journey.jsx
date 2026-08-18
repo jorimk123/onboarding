@@ -40,7 +40,7 @@ export default function JourneyPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      <header style={{ background: 'white', borderBottom: '1px solid var(--border)', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10 }}>
+      <header style={{ background: 'linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.6))', backdropFilter: 'var(--blur-sm)', WebkitBackdropFilter: 'var(--blur-sm)', border: '1px solid rgba(255,255,255,.55)', borderRadius: 22, margin: '16px 16px 0', padding: '0 22px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 16, zIndex: 10, boxShadow: 'var(--shadow-glass-sm)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: 20, padding: 4 }}>←</button>
           <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
@@ -74,7 +74,7 @@ export default function JourneyPage() {
               <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{done}/{total} done</div>
             </div>
           </div>
-          <div style={{ height: 8, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ height: 8, background: 'rgba(15,26,23,.1)', borderRadius: 99, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: pct + '%', background: 'var(--teal)', borderRadius: 99, transition: 'width .5s cubic-bezier(.4,0,.2,1)' }} />
           </div>
         </div>

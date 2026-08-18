@@ -5,6 +5,7 @@ import './index.css';
 import { api } from './api/client';
 import DashboardPage from './pages/Dashboard';
 import JourneyPage from './pages/Journey';
+import { applyAccentColor } from './theme';
 
 const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
@@ -19,6 +20,7 @@ function AuthProvider({ children }) {
       api.me().then(setUser).catch(() => localStorage.removeItem('crm_client_token')).finally(() => setLoading(false));
     } else setLoading(false);
   }, []);
+  useEffect(() => { applyAccentColor(user?.business?.accent_color); }, [user?.business?.accent_color]);
   const login = async (email, password) => {
     const { token, user } = await api.login(email, password);
     if (user.role !== 'client') throw new Error('Please use the admin portal.');
@@ -53,11 +55,17 @@ function ToastProvider({ children }) {
 }
 
 function AuthLayout({ children }) {
+  const { user } = useAuth();
+  const logoUrl = user?.business?.logo_url;
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 16 }}>
       <div style={{ marginBottom: 28, textAlign: 'center' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>✓</div>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>Onboarding Portal</div>
+        {logoUrl ? (
+          <img src={logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', margin: '0 auto 12px', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
+        ) : (
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>✓</div>
+        )}
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{user?.business?.name || 'Onboarding Portal'}</div>
       </div>
       <div className="card" style={{ width: '100%', maxWidth: 400, padding: 28 }}>{children}</div>
     </div>

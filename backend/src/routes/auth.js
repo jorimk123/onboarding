@@ -170,8 +170,9 @@ router.post('/login', async (req, res) => {
     // invited to more than one business with the same email — if so, try
     // each matching account until the password matches, most recent first.
     const { rows } = await pool.query(
-      `SELECT u.*, b.name AS business_name, b.slug AS business_slug FROM users u
-       JOIN businesses b ON b.id = u.business_id WHERE u.email=$1
+      `SELECT u.*, b.name AS business_name, b.slug AS business_slug,
+              b.accent_color AS business_accent_color, b.logo_url AS business_logo_url
+       FROM users u JOIN businesses b ON b.id = u.business_id WHERE u.email=$1
        ORDER BY (u.role IN ('owner','admin')) DESC, u.created_at DESC`,
       [email.toLowerCase().trim()]
     );
@@ -185,7 +186,10 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id, email: user.email, name: user.name, role: user.role, company: user.company,
-        business: { id: user.business_id, name: user.business_name, slug: user.business_slug },
+        business: {
+          id: user.business_id, name: user.business_name, slug: user.business_slug,
+          accent_color: user.business_accent_color, logo_url: user.business_logo_url,
+        },
       },
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
@@ -193,7 +197,9 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', auth(), async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.id,u.email,u.name,u.role,u.company,u.created_at, b.id AS business_id, b.name AS business_name, b.slug AS business_slug
+    `SELECT u.id,u.email,u.name,u.role,u.company,u.created_at,
+            b.id AS business_id, b.name AS business_name, b.slug AS business_slug,
+            b.accent_color AS business_accent_color, b.logo_url AS business_logo_url
      FROM users u JOIN businesses b ON b.id=u.business_id WHERE u.id=$1`,
     [req.user.id]
   );
@@ -201,7 +207,10 @@ router.get('/me', auth(), async (req, res) => {
   const r = rows[0];
   res.json({
     id: r.id, email: r.email, name: r.name, role: r.role, company: r.company, created_at: r.created_at,
-    business: { id: r.business_id, name: r.business_name, slug: r.business_slug },
+    business: {
+      id: r.business_id, name: r.business_name, slug: r.business_slug,
+      accent_color: r.business_accent_color, logo_url: r.business_logo_url,
+    },
   });
 });
 
