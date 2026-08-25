@@ -67,7 +67,7 @@ export default function SettingsPage() {
             <label>Logo URL</label>
             <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 6 }}>Paste a link to a hosted image — shown in the sidebar and client portal.</div>
             <div style={{ display: 'flex', gap: 8, maxWidth: 420, alignItems: 'center', marginBottom: 16 }}>
-              {logoDraft && <img src={logoDraft} alt="" style={{ maxWidth: 40, maxHeight: 40, width: 'auto', height: 'auto', borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
+              {logoDraft && <img src={logoDraft} alt="" style={{ maxWidth: 40, maxHeight: 40, width: 'auto', height: 'auto', objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
               <input value={logoDraft} onChange={e => setLogoDraft(e.target.value)} disabled={!isOwner} placeholder="https://example.com/logo.png" />
               {isOwner && <button className="btn btn-secondary" disabled={saving || logoDraft === (business.logo_url || '')} onClick={() => save({ logo_url: logoDraft || null }, 'Logo updated')}>Save</button>}
             </div>

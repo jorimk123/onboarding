@@ -204,7 +204,7 @@ function Layout({ children, crumb, title, actions }) {
             // Sized by its own aspect ratio (capped to a 40x40 box) rather than
             // force-cropped into a square — wide/rectangular logos stay wide,
             // square logos stay square.
-            <img src={user.business.logo_url} alt="" style={{ maxWidth: 40, maxHeight: 40, width: 'auto', height: 'auto', borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
+            <img src={user.business.logo_url} alt="" style={{ maxWidth: 40, maxHeight: 40, width: 'auto', height: 'auto', objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
           ) : (
             <div className="sidebar-logo-chip"><div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,.94)' }} /></div>
           )}
