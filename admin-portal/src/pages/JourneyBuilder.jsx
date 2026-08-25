@@ -335,7 +335,7 @@ export default function JourneyBuilderPage() {
                   </div>
                   {selected && draft && (
                     <div style={{ border: '1.5px solid var(--purple-mid, #5b4fd6)', borderTop: '1px solid var(--hairline)', borderRadius: '0 0 14px 14px', padding: '14px 14px 16px 50px', background: 'rgba(91,79,214,.03)' }}>
-                      <StepFieldsEditor draft={draft} patch={patch} />
+                      <StepFieldsEditor draft={draft} patch={patch} dirty={dirty} saving={saving} onPublish={publish} />
                     </div>
                   )}
                 </div>
@@ -439,7 +439,7 @@ function Toggle({ label, sub, checked, onChange }) {
 // title, description, type-specific config, and the field list. Behavior
 // settings (required/skip/notify/reminders) live in StepSettingsPanel on
 // the right instead, so they're always visible without scrolling.
-function StepFieldsEditor({ draft, patch }) {
+function StepFieldsEditor({ draft, patch, dirty, saving, onPublish }) {
   return (
     <div>
       <input value={draft.title} onChange={e => patch({ title: e.target.value })}
@@ -478,6 +478,10 @@ function StepFieldsEditor({ draft, patch }) {
             addLabel={draft.step_type === 'Upload' ? '+ Add file to request' : draft.step_type === 'Learn' ? '+ Add video' : draft.step_type === 'Check' ? '+ Add question' : '+ Add field'} />
         </div>
       )}
+
+      <button className="btn btn-primary" disabled={!dirty || saving} onClick={onPublish} style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}>
+        {saving ? 'Publishing…' : dirty ? 'Publish changes' : 'Published ✓'}
+      </button>
     </div>
   );
 }
