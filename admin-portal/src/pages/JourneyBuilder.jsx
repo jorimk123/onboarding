@@ -210,7 +210,7 @@ export default function JourneyBuilderPage() {
 
       await api.updateTask(id, selectedTask.sectionId, selectedTask.id, {
         title: draft.title, description: draft.description, tag: draft.tag || null, assignee: draft.assignee || null,
-        step_type: draft.step_type, fields: outFields,
+        step_type: draft.step_type, fields: outFields, position: selectedTask.position,
         docuseal_template_id: draft.step_type === 'Sign' ? (draft.docuseal_template_id || null) : null,
         docuseal_trigger: draft.docuseal_trigger,
         booking_url: draft.step_type === 'Book' ? (draft.booking_url || null) : null,
