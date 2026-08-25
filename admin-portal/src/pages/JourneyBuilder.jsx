@@ -46,6 +46,8 @@ export default function JourneyBuilderPage() {
   const [draft, setDraft] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draggingStepId, setDraggingStepId] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   useEffect(() => { api.getJourneys().then(setJourneys).catch(() => {}); }, []);
 
@@ -99,18 +101,90 @@ export default function JourneyBuilderPage() {
     return s.id;
   };
 
-  const addStep = async (stepTypeId) => {
+  // Creates a step at a specific position, shifting anything already at or
+  // after that position down by one. Used by both the palette's click-to-add
+  // (which always targets the end of the list) and drag-and-drop (which can
+  // target any position between existing steps).
+  const insertStepAt = async (stepTypeId, atIndex) => {
     try {
       const sid = await ensureSectionId();
       const meta = stepMeta(stepTypeId);
+      const toShift = steps.slice(atIndex);
+      if (toShift.length) {
+        await Promise.all(toShift.map(t => api.updateTask(id, t.sectionId, t.id, { ...t, position: t.position + 1 })));
+      }
       const created = await api.createTask(id, sid, {
-        title: `New ${meta.label.toLowerCase()}`, step_type: stepTypeId, position: steps.length,
+        title: `New ${meta.label.toLowerCase()}`, step_type: stepTypeId, position: atIndex,
         ...defaultsForType(stepTypeId),
       });
       toast('Step added');
       load(true);
       setSelectedTaskId(created.id);
     } catch (err) { toast(err.message, 'error'); }
+  };
+
+  const addStep = (stepTypeId) => insertStepAt(stepTypeId, steps.length);
+
+  // Reorders an existing step to a new index via drag-and-drop, renumbering
+  // every step in between so positions stay contiguous.
+  const reorderStep = async (draggedTaskId, toIndex) => {
+    const fromIndex = steps.findIndex(t => t.id === draggedTaskId);
+    if (fromIndex === -1) return;
+    const target = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    if (target === fromIndex) return;
+    const reordered = [...steps];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(target, 0, moved);
+    try {
+      await Promise.all(
+        reordered.map((t, i) => (t.position !== i ? api.updateTask(id, t.sectionId, t.id, { ...t, position: i }) : null)).filter(Boolean)
+      );
+      load(true);
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  const handlePaletteDragStart = (e, stepTypeId) => {
+    e.dataTransfer.setData('application/x-step-type', stepTypeId);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleStepDragStart = (e, task) => {
+    e.dataTransfer.setData('application/x-task-id', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingStepId(task.id);
+  };
+
+  const handleStepDragEnd = () => { setDraggingStepId(null); setDragOverIndex(null); };
+
+  const handleRowDragOver = (e, index) => {
+    if (!e.dataTransfer.types.includes('application/x-step-type') && !e.dataTransfer.types.includes('application/x-task-id')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-task-id') ? 'move' : 'copy';
+    setDragOverIndex(index);
+  };
+
+  const handleRowDrop = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const stepType = e.dataTransfer.getData('application/x-step-type');
+    const taskId = e.dataTransfer.getData('application/x-task-id');
+    setDragOverIndex(null);
+    setDraggingStepId(null);
+    if (stepType) insertStepAt(stepType, index);
+    else if (taskId) reorderStep(taskId, index);
+  };
+
+  const handleCanvasDrop = (e) => {
+    // Fired when a drag ends over the container but not on a specific row
+    // (e.g. below the last step, or on an empty journey) — always appends.
+    e.preventDefault();
+    setDragOverIndex(null);
+    setDraggingStepId(null);
+    const stepType = e.dataTransfer.getData('application/x-step-type');
+    const taskId = e.dataTransfer.getData('application/x-task-id');
+    if (stepType) insertStepAt(stepType, steps.length);
+    else if (taskId) reorderStep(taskId, steps.length);
   };
 
   const publish = async () => {
@@ -170,7 +244,8 @@ export default function JourneyBuilderPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {STEP_TYPES.map(s => (
             <button key={s.id} type="button" onClick={() => addStep(s.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, border: '1px solid var(--hairline)', background: 'rgba(255,255,255,.6)', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+              draggable onDragStart={e => handlePaletteDragStart(e, s.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, border: '1px solid var(--hairline)', background: 'rgba(255,255,255,.6)', cursor: 'grab', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
               <span style={{ width: 22, height: 22, borderRadius: 7, background: s.chip, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 3, background: s.dot }} />
               </span>
@@ -179,7 +254,7 @@ export default function JourneyBuilderPage() {
           ))}
         </div>
         <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'var(--flat-gray)', fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.5 }}>
-          <strong style={{ display: 'block', color: 'var(--text)', marginBottom: 2 }}>Click to add to canvas</strong>
+          <strong style={{ display: 'block', color: 'var(--text)', marginBottom: 2 }}>Drag onto the canvas</strong>
           Steps run in order. Anything marked optional can be skipped.
         </div>
       </div>
@@ -206,29 +281,58 @@ export default function JourneyBuilderPage() {
             <span className="flat-badge flat-badge-teal">Live</span>
           </div>
 
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}
+            onDragOver={e => { if (e.dataTransfer.types.includes('application/x-step-type') || e.dataTransfer.types.includes('application/x-task-id')) e.preventDefault(); }}
+            onDrop={handleCanvasDrop}>
             {steps.map((task, i) => {
               const meta = stepMeta(task.step_type);
               const selected = task.id === selectedTaskId;
+              const isDragging = draggingStepId === task.id;
+              const showDropLine = dragOverIndex === i;
               return (
-                <div key={task.id} onClick={() => setSelectedTaskId(task.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, cursor: 'pointer', border: selected ? '1.5px solid var(--purple-mid, #5b4fd6)' : '1.5px solid transparent', background: selected ? 'var(--purple-light)' : 'transparent' }}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: selected ? '#5b4fd6' : 'var(--flat-gray)', color: selected ? 'white' : 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{task.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{stepSummary(task)}</div>
-                  </div>
-                  <span className="flat-badge flat-badge-purple">{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
-                  <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
-                    <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveStep(task, -1)} title="Move up">↑</button>
-                    <button className="btn btn-ghost btn-sm" disabled={i === steps.length - 1} onClick={() => moveStep(task, 1)} title="Move down">↓</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => deleteStep(task)} title="Delete">✕</button>
+                <div key={task.id}>
+                  {showDropLine && <div style={{ height: 3, borderRadius: 3, background: '#5b4fd6', margin: '2px 14px' }} />}
+                  <div
+                    draggable
+                    onDragStart={e => handleStepDragStart(e, task)}
+                    onDragEnd={handleStepDragEnd}
+                    onDragOver={e => handleRowDragOver(e, i)}
+                    onDragLeave={() => setDragOverIndex(d => (d === i ? null : d))}
+                    onDrop={e => handleRowDrop(e, i)}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, cursor: 'pointer', border: selected ? '1.5px solid var(--purple-mid, #5b4fd6)' : '1.5px solid transparent', background: selected ? 'var(--purple-light)' : 'transparent', opacity: isDragging ? 0.4 : 1 }}>
+                    <span style={{ cursor: 'grab', color: 'var(--text3)', fontSize: 13, lineHeight: 1, flexShrink: 0, padding: '0 2px' }} title="Drag to reorder">⠿</span>
+                    <span style={{ width: 26, height: 26, borderRadius: '50%', background: selected ? '#5b4fd6' : 'var(--flat-gray)', color: selected ? 'white' : 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{task.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{stepSummary(task)}</div>
+                    </div>
+                    <span className="flat-badge flat-badge-purple">{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
+                    <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
+                      <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveStep(task, -1)} title="Move up">↑</button>
+                      <button className="btn btn-ghost btn-sm" disabled={i === steps.length - 1} onClick={() => moveStep(task, 1)} title="Move down">↓</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => deleteStep(task)} title="Delete">✕</button>
+                    </div>
                   </div>
                 </div>
               );
             })}
+            {steps.length > 0 && (
+              <div
+                onDragOver={e => { if (e.dataTransfer.types.includes('application/x-step-type') || e.dataTransfer.types.includes('application/x-task-id')) { e.preventDefault(); e.stopPropagation(); setDragOverIndex(steps.length); } }}
+                onDrop={e => handleRowDrop(e, steps.length)}
+                style={{ minHeight: 16 }}>
+                {dragOverIndex === steps.length && <div style={{ height: 3, borderRadius: 3, background: '#5b4fd6', margin: '2px 14px' }} />}
+              </div>
+            )}
             {steps.length === 0 && (
-              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No steps yet — add one from the left.</div>
+              <div
+                onDragOver={e => { if (e.dataTransfer.types.includes('application/x-step-type')) { e.preventDefault(); setDragOverIndex(0); } }}
+                onDragLeave={() => setDragOverIndex(null)}
+                onDrop={e => handleRowDrop(e, 0)}
+                style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13, border: dragOverIndex === 0 ? '1.5px dashed #5b4fd6' : '1.5px dashed transparent', borderRadius: 12 }}>
+                No steps yet — drag one from the left, or click to add.
+              </div>
             )}
           </div>
         </div>
