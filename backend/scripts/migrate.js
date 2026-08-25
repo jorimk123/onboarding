@@ -6,6 +6,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const { seedMentorJourney } = require('./seed-mentor-journey');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -20,6 +21,14 @@ const pool = new Pool({
   } catch (err) {
     console.error('[migrate] failed:', err.message);
     process.exitCode = 1;
+    await pool.end();
+    return;
+  }
+  try {
+    await seedMentorJourney(pool);
+  } catch (err) {
+    // Non-fatal — don't fail the whole deploy over a seed script.
+    console.error('[migrate] seed-mentor-journey failed:', err.message);
   } finally {
     await pool.end();
   }
