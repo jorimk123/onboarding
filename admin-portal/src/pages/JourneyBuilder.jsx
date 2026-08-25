@@ -7,10 +7,9 @@ export const STEP_TYPES = [
   { id: 'Form', label: 'Form', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', blurb: 'Ask questions and collect answers.' },
   { id: 'Upload', label: 'File upload', chip: 'rgba(130,225,225,.3)', dot: '#12706f', blurb: 'Ask them to attach a document or photo.' },
   { id: 'Sign', label: 'E-signature', chip: 'rgba(255,168,200,.26)', dot: '#d1508a', blurb: 'Send a document out to be signed via DocuSeal.' },
-  { id: 'Check', label: 'Background check / Quiz', chip: 'rgba(255,196,120,.32)', dot: '#c07a1c', blurb: 'Run a Checkr background check, or a multiple-choice quiz.' },
+  { id: 'Check', label: 'Quiz', chip: 'rgba(255,196,120,.32)', dot: '#c07a1c', blurb: 'A multiple-choice quiz they answer one question at a time.' },
   { id: 'Learn', label: 'Training module', chip: 'rgba(107,79,213,.14)', dot: '#6b4fd5', blurb: 'Videos they watch before Next unlocks.' },
   { id: 'Book', label: 'Schedule a call', chip: 'rgba(34,169,140,.16)', dot: '#177a66', blurb: 'Link out to a booking page (Calendly, Cal.com, etc).' },
-  { id: 'Pay', label: 'Payment', chip: 'rgba(30,40,80,.1)', dot: '#5a6485', blurb: 'Take a fee or deposit via Stripe.' },
 ];
 
 export const FIELD_TYPES = ['Short text', 'Long text', 'Email', 'Phone', 'Date', 'Multiple choice', 'Yes / No', 'Checkbox', 'Dropdown', 'Upload', 'Video'];
@@ -84,7 +83,7 @@ export default function JourneyBuilderPage() {
               </div>
               {section.tasks.map((task, i) => {
                 const meta = stepMeta(task.step_type);
-                const isQuiz = task.step_type === 'Check' && (task.fields || []).some(f => f.type === 'Multiple choice');
+                const isQuiz = task.step_type === 'Check';
                 return (
                   <div key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 20px', borderBottom: i < section.tasks.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
                     <span style={{ width: 26, height: 26, borderRadius: 8, background: meta.chip, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
@@ -100,12 +99,8 @@ export default function JourneyBuilderPage() {
                         {task.step_type === 'Sign' && task.docuseal_template_id && (
                           <span className="badge badge-teal" title={`DocuSeal template: ${task.docuseal_template_id}`}>📄 DocuSeal ({task.docuseal_trigger})</span>
                         )}
-                        {task.step_type === 'Check' && !isQuiz && (
-                          <span className="badge badge-amber">🔍 {task.checkr_package || 'Checkr'}{!task.checkr_package ? '' : ''}</span>
-                        )}
                         {isQuiz && <span className="badge badge-amber">{(task.fields || []).filter(f => f.type === 'Multiple choice').length} questions</span>}
                         {task.step_type === 'Book' && task.booking_url && <span className="badge badge-teal">🗓️ Booking link set</span>}
-                        {task.step_type === 'Pay' && task.payment_amount_cents != null && <span className="badge badge-teal">💳 ${(task.payment_amount_cents / 100).toFixed(2)}</span>}
                         {(task.fields || []).length > 0 && task.step_type !== 'Check' && <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>{task.fields.length} field{task.fields.length !== 1 ? 's' : ''}</span>}
                       </div>
                     </div>
@@ -189,17 +184,12 @@ function FieldEditor({ fields, setFields, allowedTypes, addLabel }) {
 function TaskModal({ journeyId, sectionId, task, onClose, onSave }) {
   const toast = useToast();
   const [stepType, setStepType] = useState(task?.step_type || 'Form');
-  const isExistingQuiz = task?.step_type === 'Check' && (task?.fields || []).some(f => f.type === 'Multiple choice');
-  const [checkMode, setCheckMode] = useState(isExistingQuiz ? 'quiz' : 'bgcheck');
   const [form, setForm] = useState({
     title: task?.title || '', description: task?.description || '',
     tag: task?.tag || '', assignee: task?.assignee || '',
     docuseal_template_id: task?.docuseal_template_id || '',
     docuseal_trigger: task?.docuseal_trigger || 'assignment',
     booking_url: task?.booking_url || '',
-    payment_amount: task?.payment_amount_cents != null ? (task.payment_amount_cents / 100).toFixed(2) : '',
-    payment_currency: task?.payment_currency || 'usd',
-    checkr_package: task?.checkr_package || 'basic_criminal',
   });
   const [fields, setFields] = useState(task?.fields?.length ? task.fields : []);
   const [saving, setSaving] = useState(false);
@@ -217,10 +207,8 @@ function TaskModal({ journeyId, sectionId, task, onClose, onSave }) {
     try {
       let outFields = fields;
       if (stepType === 'Check') {
-        outFields = checkMode === 'quiz'
-          ? fields.filter(f => f.type === 'Multiple choice')
-          : [{ id: uid(), label: 'I consent to a background check', type: 'Checkbox', required: true }];
-      } else if (stepType === 'Sign' || stepType === 'Book' || stepType === 'Pay') {
+        outFields = fields.filter(f => f.type === 'Multiple choice');
+      } else if (stepType === 'Sign' || stepType === 'Book') {
         outFields = [];
       }
 
@@ -231,9 +219,6 @@ function TaskModal({ journeyId, sectionId, task, onClose, onSave }) {
         docuseal_template_id: stepType === 'Sign' ? (form.docuseal_template_id || null) : null,
         docuseal_trigger: form.docuseal_trigger,
         booking_url: stepType === 'Book' ? (form.booking_url || null) : null,
-        payment_amount_cents: stepType === 'Pay' && form.payment_amount ? Math.round(parseFloat(form.payment_amount) * 100) : null,
-        payment_currency: form.payment_currency,
-        checkr_package: stepType === 'Check' && checkMode === 'bgcheck' ? form.checkr_package : null,
       };
 
       if (task) await api.updateTask(journeyId, sectionId, task.id, payload);
@@ -294,32 +279,11 @@ function TaskModal({ journeyId, sectionId, task, onClose, onSave }) {
             </div>
           )}
 
-          {stepType === 'Pay' && (
-            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="form-group"><label>Amount (USD)</label><input type="number" step="0.01" min="0" value={form.payment_amount} onChange={set('payment_amount')} placeholder="25.00" /></div>
-                <div className="form-group"><label>Currency</label><input value={form.payment_currency} onChange={set('payment_currency')} placeholder="usd" /></div>
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--text2)' }}>Charged via a real Stripe Checkout session. Requires STRIPE_SECRET_KEY to be set — otherwise the client sees a clear "not configured" message.</div>
-            </div>
-          )}
-
           {stepType === 'Check' && (
             <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <button type="button" className={`tag-pill ${checkMode === 'bgcheck' ? 'selected' : ''}`} onClick={() => setCheckMode('bgcheck')}>Background check</button>
-                <button type="button" className={`tag-pill ${checkMode === 'quiz' ? 'selected' : ''}`} onClick={() => setCheckMode('quiz')}>Quiz</button>
-              </div>
-              {checkMode === 'bgcheck' ? (
-                <div className="form-group">
-                  <label>Checkr package</label>
-                  <input value={form.checkr_package} onChange={set('checkr_package')} placeholder="basic_criminal" />
-                  <div style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 4 }}>Runs via Checkr once the client checks the consent box. Requires CHECKR_API_KEY to be set.</div>
-                </div>
-              ) : (
-                <FieldEditor fields={fields.filter(f => f.type === 'Multiple choice').length ? fields : [emptyField('Multiple choice')]}
-                  setFields={fs => setFields(fs)} allowedTypes={['Multiple choice']} addLabel="+ Add question" />
-              )}
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Quiz questions</div>
+              <FieldEditor fields={fields.filter(f => f.type === 'Multiple choice').length ? fields : [emptyField('Multiple choice')]}
+                setFields={fs => setFields(fs)} allowedTypes={['Multiple choice']} addLabel="+ Add question" />
             </div>
           )}
 

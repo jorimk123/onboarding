@@ -11,10 +11,7 @@ function youtubeId(url) {
 }
 
 function isQuizStep(task) {
-  return task.step_type === 'Check' && (task.fields || []).some(f => f.type === 'Multiple choice');
-}
-function isBgCheckStep(task) {
-  return task.step_type === 'Check' && !isQuizStep(task);
+  return task.step_type === 'Check';
 }
 
 // ── signature pad ────────────────────────────────────────────────
@@ -185,7 +182,7 @@ function QuizRunner({ task, answers, onAnswer, onFinish }) {
 }
 
 // ── one task's expandable body ──────────────────────────────────
-function TaskBody({ task, onSaveField, onComplete, onUncomplete, onPay, toast }) {
+function TaskBody({ task, onSaveField, onComplete, onUncomplete, toast }) {
   const [answers, setAnswers] = useState(task.responses || {});
   const [busy, setBusy] = useState(false);
 
@@ -207,36 +204,6 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onPay, toast })
         setBusy(true);
         try { await onComplete(task.id); toast('Quiz submitted ✓'); } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
       }} />
-    );
-  }
-
-  if (isBgCheckStep(task)) {
-    const consentField = (task.fields || []).find(f => f.type === 'Checkbox') || { id: 'consent', type: 'Checkbox', label: 'I consent to a background check being run.' };
-    const consented = !!answers[consentField.id];
-    return (
-      <div>
-        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description || 'This step runs a real background check via our screening provider.'}</p>
-        <FieldInput field={consentField} value={answers[consentField.id]} disabled={consented || task.completed} onChange={v => save(consentField.id, v)} />
-        {consented && !task.completed && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: 'var(--text3)' }}>⏳ Background check submitted — awaiting results.</div>}
-      </div>
-    );
-  }
-
-  if (task.step_type === 'Pay') {
-    const amount = task.payment_amount_cents != null ? `$${(task.payment_amount_cents / 100).toFixed(2)} ${(task.payment_currency || 'usd').toUpperCase()}` : null;
-    return (
-      <div>
-        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
-        {task.completed
-          ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Payment received</div>
-          : (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={async () => {
-              setBusy(true);
-              try { const { url } = await onPay(task.id); window.location.href = url; }
-              catch (err) { toast(err.message, 'error'); setBusy(false); }
-            }}>{amount ? `Pay ${amount}` : 'Pay now'}</button>
-          )}
-      </div>
     );
   }
 
@@ -289,7 +256,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onPay, toast })
   );
 }
 
-const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🛡️', Learn: '▶️', Book: '📅', Pay: '💳' };
+const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🧠', Learn: '▶️', Book: '📅' };
 
 export default function JourneyPage() {
   const { id } = useParams(); const nav = useNavigate();
@@ -312,7 +279,6 @@ export default function JourneyPage() {
     try { await api.uncompleteTask(taskId); load(); } catch (err) { toast(err.message, 'error'); }
   };
   const saveField = (taskId, fieldId, value) => api.saveField(taskId, fieldId, value);
-  const pay = (taskId) => api.pay(taskId);
 
   if (loading) return <div className="spinner" />;
   if (!journey) return null;
@@ -393,7 +359,6 @@ export default function JourneyPage() {
                             {task.tag && <span className="badge badge-purple">{task.tag}</span>}
                             {task.assignee && <span style={{ fontSize: 12, color: 'var(--text3)' }}>👤 {task.assignee}</span>}
                             {isQuizStep(task) && <span className="badge badge-teal">Quiz</span>}
-                            {isBgCheckStep(task) && <span className="badge badge-teal">Background check</span>}
                           </div>
                         </div>
                         {task.completed && <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 500, flexShrink: 0, marginTop: 2 }}>Done ✓</div>}
@@ -401,7 +366,7 @@ export default function JourneyPage() {
                       </div>
                       {isOpen && (
                         <div style={{ padding: '4px 20px 20px 54px' }} onClick={e => e.stopPropagation()}>
-                          <TaskBody task={task} onSaveField={saveField} onComplete={complete} onUncomplete={uncomplete} onPay={pay} toast={toast} />
+                          <TaskBody task={task} onSaveField={saveField} onComplete={complete} onUncomplete={uncomplete} toast={toast} />
                         </div>
                       )}
                     </div>

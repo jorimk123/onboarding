@@ -4,8 +4,6 @@ const auth = require('../middleware/auth');
 const { dispatch } = require('../webhooks/dispatcher');
 const { sendCompletionEmail } = require('../services/email');
 const { sendDocument } = require('../services/docuseal');
-const { createCandidateAndInvitation } = require('../services/checkr');
-const { createCheckoutSession } = require('../services/stripe');
 
 // Load a task + assert the caller (a client) is assigned to its journey.
 async function loadOwnedTask(req, taskId) {
@@ -22,9 +20,7 @@ async function loadOwnedTask(req, taskId) {
 }
 
 // POST /progress/tasks/:taskId/fields/:fieldId — save a client's answer to
-// one field on a Form/Quiz/Learn step. If the field is the consent checkbox
-// on a background-check step, this is also what triggers the real Checkr
-// request. Real persistence either way — no fake "saved" state.
+// one field on a Form/Quiz/Learn step. Real persistence — no fake "saved" state.
 router.post('/tasks/:taskId/fields/:fieldId', auth(), async (req, res) => {
   const { value } = req.body;
   try {
@@ -39,35 +35,8 @@ router.post('/tasks/:taskId/fields/:fieldId', auth(), async (req, res) => {
       [req.user.id, task.id, field.id, JSON.stringify(value)]
     );
 
-    // Background check: consent field on a Check step (non-quiz) with value truthy.
-    const isQuiz = (task.fields || []).some(f => f.type === 'Multiple choice');
-    if (task.step_type === 'Check' && !isQuiz && field.type === 'Checkbox' && value) {
-      const { rows: [client] } = await pool.query('SELECT id,name,email FROM users WHERE id=$1', [req.user.id]);
-      createCandidateAndInvitation({ client, task }).catch(console.error);
-    }
-
     res.json({ saved: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
-});
-
-// POST /progress/tasks/:taskId/pay — create a real Stripe Checkout session.
-// Returns 501 with a clear message if STRIPE_SECRET_KEY isn't configured,
-// rather than pretending a payment happened.
-router.post('/tasks/:taskId/pay', auth(), async (req, res) => {
-  try {
-    const task = await loadOwnedTask(req, req.params.taskId);
-    if (!task) return res.status(404).json({ error: 'Not found' });
-    if (task.step_type !== 'Pay' || !task.payment_amount_cents) return res.status(400).json({ error: 'This step is not a payment step' });
-    if (!process.env.STRIPE_SECRET_KEY) return res.status(501).json({ error: 'Payments are not configured yet. Ask your admin to add a Stripe key.' });
-
-    const { rows: [client] } = await pool.query('SELECT id,name,email FROM users WHERE id=$1', [req.user.id]);
-    const session = await createCheckoutSession({ client, task });
-    await pool.query(
-      `INSERT INTO payments (client_id, task_id, stripe_session_id, amount_cents, currency, status) VALUES ($1,$2,$3,$4,$5,'pending')`,
-      [req.user.id, task.id, session.id, task.payment_amount_cents, task.payment_currency || 'usd']
-    );
-    res.json({ url: session.url });
-  } catch (err) { console.error(err); res.status(500).json({ error: err.message || 'Server error' }); }
 });
 
 router.post('/tasks/:taskId/complete', auth(), async (req, res) => {

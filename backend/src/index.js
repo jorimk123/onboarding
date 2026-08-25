@@ -2,8 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { handleInboundWebhook } = require('./services/docuseal');
-const { handleInboundWebhook: handleCheckrWebhook } = require('./services/checkr');
-const { handleInboundWebhook: handleStripeWebhook } = require('./services/stripe');
 const { startScheduler } = require('./services/scheduler');
 
 const app = express();
@@ -30,12 +28,6 @@ app.post('/docuseal/webhook', express.raw({ type: '*/*' }), (req, res, next) => 
   try { req.body = JSON.parse(req.body); } catch { req.body = {}; }
   next();
 }, handleInboundWebhook);
-
-// Checkr webhook — plain JSON is fine here (no signature check yet).
-app.post('/checkr/webhook', express.json(), handleCheckrWebhook);
-
-// Stripe webhook — needs the raw body untouched to verify the signature.
-app.post('/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
 app.use(express.json());
 
