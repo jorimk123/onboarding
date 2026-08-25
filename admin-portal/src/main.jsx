@@ -201,7 +201,10 @@ function Layout({ children, crumb, title, actions }) {
       <aside className="sidebar">
         <div className="sidebar-logo">
           {user?.business?.logo_url ? (
-            <img src={user.business.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 11, objectFit: 'cover', flexShrink: 0, boxShadow: '0 2px 8px rgba(91,79,214,.4)' }} onError={e => { e.target.style.display = 'none'; }} />
+            // Sized by its own aspect ratio (capped to a 40x40 box) rather than
+            // force-cropped into a square — wide/rectangular logos stay wide,
+            // square logos stay square.
+            <img src={user.business.logo_url} alt="" style={{ maxWidth: 40, maxHeight: 40, width: 'auto', height: 'auto', borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
           ) : (
             <div className="sidebar-logo-chip"><div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,.94)' }} /></div>
           )}
@@ -260,6 +263,7 @@ function JourneysPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [sharing, setSharing] = useState(null);
   const [filter, setFilter] = useState('all');
   const toast = useToast();
   const nav = useNavigate();
@@ -307,6 +311,7 @@ function JourneysPage() {
                     <span style={{ width: 8, height: 8, borderRadius: 3, background: cat.dot }} />
                     <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: cat.text }}>{cat.id}</span>
                     <div style={{ flex: 1 }} />
+                    <button onClick={e => { e.stopPropagation(); setSharing(j); }} className="btn btn-ghost btn-sm">Share</button>
                     <button onClick={e => { e.stopPropagation(); setEditing(j); }} className="btn btn-ghost btn-sm">Edit</button>
                     <button onClick={e => toggleArchive(j, e)} className="btn btn-ghost btn-sm">{j.archived_at ? 'Unarchive' : 'Archive'}</button>
                     <button onClick={e => del(j.id, j.name, e)} className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}>✕</button>
@@ -330,7 +335,56 @@ function JourneysPage() {
       </div>
       {showCreate && <JourneyModal onClose={() => setShowCreate(false)} onSave={() => { setShowCreate(false); load(); }} />}
       {editing && <JourneyModal initial={editing} onClose={() => setEditing(null)} onSave={() => { setEditing(null); load(); }} />}
+      {sharing && <ShareJourneyModal journey={sharing} onClose={() => setSharing(null)} />}
     </Layout>
+  );
+}
+
+function ShareJourneyModal({ journey, onClose }) {
+  const toast = useToast();
+  const [email, setEmail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [link, setLink] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault(); setSaving(true);
+    try {
+      const invite = await api.createInvite({ email, role: 'client', journey_id: journey.id });
+      setLink(invite.link);
+      toast('Invite created');
+    } catch (err) { toast(err.message, 'error'); } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">Share "{journey.name}"</div>
+        {!link ? (
+          <form onSubmit={submit}>
+            <div className="form-group">
+              <label>Their email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="client@company.com" autoFocus />
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>
+                They'll get a welcome email with a link to create their account and start "{journey.name}".
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving}>{saving ? 'Sending…' : 'Send invite'}</button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>Invite created. If email isn't configured, share this link directly:</p>
+            <div className="code" style={{ display: 'block', wordBreak: 'break-all', padding: 10, marginBottom: 16 }}>{link}</div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => { navigator.clipboard.writeText(link); toast('Copied'); }}>Copy link</button>
+              <button className="btn btn-primary" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

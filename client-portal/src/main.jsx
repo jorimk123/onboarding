@@ -61,7 +61,7 @@ function AuthLayout({ children }) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 16 }}>
       <div style={{ marginBottom: 28, textAlign: 'center' }}>
         {logoUrl ? (
-          <img src={logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', margin: '0 auto 12px', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
+          <img src={logoUrl} alt="" style={{ maxWidth: 64, maxHeight: 56, width: 'auto', height: 'auto', borderRadius: 10, objectFit: 'contain', margin: '0 auto 12px', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
         ) : (
           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>✓</div>
         )}
