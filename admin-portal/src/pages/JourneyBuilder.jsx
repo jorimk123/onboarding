@@ -408,7 +408,10 @@ function FieldList({ fields, setFields, allowedTypes, addLabel }) {
               {allowedTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
-          {(f.type === 'Multiple choice' || f.type === 'Dropdown') && (
+          {f.type === 'Multiple choice' && (
+            <OptionsEditor options={f.options && f.options.length ? f.options : ['Option 1']} setOptions={opts => update(i, { options: opts })} />
+          )}
+          {f.type === 'Dropdown' && (
             <textarea rows={2} value={(f.options || []).join('\n')} onChange={e => update(i, { options: e.target.value.split('\n') })} placeholder={'Option A\nOption B'} style={{ fontSize: 12.5 }} />
           )}
           {f.type === 'Video' && (
@@ -417,6 +420,33 @@ function FieldList({ fields, setFields, allowedTypes, addLabel }) {
         </div>
       ))}
       <button type="button" className="btn btn-secondary btn-sm" onClick={add} style={{ width: '100%', justifyContent: 'center' }}>{addLabel || '+ Add field'}</button>
+    </div>
+  );
+}
+
+// Explicit answer editor for quiz (Multiple choice) questions — the admin
+// types out each possible answer as its own field, 1 to 5 of them, and the
+// client picks exactly one when they take the quiz.
+function OptionsEditor({ options, setOptions }) {
+  const opts = options && options.length ? options : ['Option 1'];
+  const update = (i, val) => setOptions(opts.map((o, oi) => (oi === i ? val : o)));
+  const remove = i => setOptions(opts.filter((_, oi) => oi !== i));
+  const add = () => setOptions([...opts, '']);
+
+  return (
+    <div>
+      {opts.map((o, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+          <span style={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid var(--border-dark)', flexShrink: 0 }} />
+          <input value={o} onChange={e => update(i, e.target.value)} placeholder={`Answer ${i + 1}`} style={{ flex: 1, fontSize: 12.5 }} />
+          <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => remove(i)} disabled={opts.length <= 1} title="Remove answer">✕</button>
+        </div>
+      ))}
+      {opts.length < 5 ? (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={add} style={{ width: '100%', justifyContent: 'center' }}>+ Add answer</button>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>Maximum of 5 answers</div>
+      )}
     </div>
   );
 }
@@ -442,15 +472,11 @@ function Toggle({ label, sub, checked, onChange }) {
 function StepFieldsEditor({ draft, patch, dirty, saving, onPublish }) {
   return (
     <div>
+      <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)', marginBottom: 4 }}>Step title</label>
       <input value={draft.title} onChange={e => patch({ title: e.target.value })}
-        style={{ fontSize: 15, fontWeight: 800, border: 'none', padding: '4px 0', width: '100%', background: 'transparent' }} />
+        placeholder="Untitled step" style={{ fontSize: 15, fontWeight: 800, width: '100%', marginBottom: 10 }} />
       <textarea value={draft.description} onChange={e => patch({ description: e.target.value })} rows={2}
-        placeholder="What this step is for…" style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 10 }} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-        <input value={draft.tag} onChange={e => patch({ tag: e.target.value })} placeholder="Tag" style={{ fontSize: 12 }} />
-        <input value={draft.assignee} onChange={e => patch({ assignee: e.target.value })} placeholder="Assignee" style={{ fontSize: 12 }} />
-      </div>
+        placeholder="What this step is for…" style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 12 }} />
 
       {draft.step_type === 'Sign' && (
         <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginBottom: 4 }}>
