@@ -29,10 +29,23 @@ function defaultsForType(id) {
 function stepSummary(task) {
   const isQuiz = task.step_type === 'Check';
   if (isQuiz) return `${(task.fields || []).filter(f => f.type === 'Multiple choice').length} questions`;
-  if (task.step_type === 'Sign') return task.docuseal_template_id ? `DocuSeal · ${task.docuseal_trigger}` : 'DocuSeal not set up';
+  if (task.step_type === 'Sign') return task.docuseal_template_id ? 'DocuSeal' : 'DocuSeal · not set up';
   if (task.step_type === 'Book') return task.booking_url ? 'Booking link set' : 'No booking link yet';
-  if ((task.fields || []).length) return `${task.step_type} · ${task.fields.length} field${task.fields.length !== 1 ? 's' : ''}`;
+  if ((task.fields || []).length) return `${task.fields.length} field${task.fields.length !== 1 ? 's' : ''}`;
   return task.step_type;
+}
+
+// Subtitle shown under a collapsed step row, e.g. "DocuSeal · required".
+function stepSubtitle(task) {
+  return `${stepSummary(task)} · ${task.required_to_continue === false ? 'optional' : 'required'}`;
+}
+
+// Type-specific badge color, matching each step type's palette accent.
+function badgeClassForType(stepType) {
+  if (stepType === 'Sign') return 'flat-badge-pink';
+  if (stepType === 'Check') return 'flat-badge-amber';
+  if (stepType === 'Upload' || stepType === 'Book') return 'flat-badge-teal';
+  return 'flat-badge-purple';
 }
 
 export default function JourneyBuilderPage() {
@@ -299,21 +312,32 @@ export default function JourneyBuilderPage() {
                     onDragOver={e => handleRowDragOver(e, i)}
                     onDragLeave={() => setDragOverIndex(d => (d === i ? null : d))}
                     onDrop={e => handleRowDrop(e, i)}
-                    onClick={() => setSelectedTaskId(task.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, cursor: 'pointer', border: selected ? '1.5px solid var(--purple-mid, #5b4fd6)' : '1.5px solid transparent', background: selected ? 'var(--purple-light)' : 'transparent', opacity: isDragging ? 0.4 : 1 }}>
+                    onClick={() => setSelectedTaskId(selected ? null : task.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', cursor: 'pointer',
+                      borderRadius: selected ? '14px 14px 0 0' : 14,
+                      border: selected ? '1.5px solid var(--purple-mid, #5b4fd6)' : '1.5px solid transparent',
+                      borderBottom: selected ? 'none' : undefined,
+                      background: selected ? 'var(--purple-light)' : 'transparent', opacity: isDragging ? 0.4 : 1,
+                    }}>
                     <span style={{ cursor: 'grab', color: 'var(--text3)', fontSize: 13, lineHeight: 1, flexShrink: 0, padding: '0 2px' }} title="Drag to reorder">⠿</span>
                     <span style={{ width: 26, height: 26, borderRadius: '50%', background: selected ? '#5b4fd6' : 'var(--flat-gray)', color: selected ? 'white' : 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{task.title}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{stepSummary(task)}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{stepSubtitle(task)}</div>
                     </div>
-                    <span className="flat-badge flat-badge-purple">{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
+                    <span className={`flat-badge ${badgeClassForType(task.step_type)}`}>{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
                     <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
                       <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveStep(task, -1)} title="Move up">↑</button>
                       <button className="btn btn-ghost btn-sm" disabled={i === steps.length - 1} onClick={() => moveStep(task, 1)} title="Move down">↓</button>
                       <button className="btn btn-danger btn-sm" onClick={() => deleteStep(task)} title="Delete">✕</button>
                     </div>
                   </div>
+                  {selected && draft && (
+                    <div style={{ border: '1.5px solid var(--purple-mid, #5b4fd6)', borderTop: '1px solid var(--hairline)', borderRadius: '0 0 14px 14px', padding: '14px 14px 16px 50px', background: 'rgba(91,79,214,.03)' }}>
+                      <StepFieldsEditor draft={draft} patch={patch} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -338,12 +362,12 @@ export default function JourneyBuilderPage() {
         </div>
       </div>
 
-      {/* ── Edit step panel ── */}
+      {/* ── Step settings panel ── */}
       <div className="flat-card" style={{ position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
         {!selectedTask || !draft ? (
-          <div style={{ padding: '20px 4px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Select a step to edit it here.</div>
+          <div style={{ padding: '20px 4px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Click a step to expand it and edit its settings here.</div>
         ) : (
-          <EditStepPanel
+          <StepSettingsPanel
             key={selectedTask.id}
             stepNumber={steps.findIndex(t => t.id === selectedTask.id) + 1}
             draft={draft} patch={patch} dirty={dirty} saving={saving} onPublish={publish}
@@ -405,18 +429,15 @@ function Toggle({ label, sub, checked, onChange }) {
   );
 }
 
-function EditStepPanel({ stepNumber, draft, patch, dirty, saving, onPublish }) {
-  const meta = stepMeta(draft.step_type);
-
+// Inline "in-canvas" editor rendered directly under an expanded step row:
+// title, description, type-specific config, and the field list. Behavior
+// settings (required/skip/notify/reminders) live in StepSettingsPanel on
+// the right instead, so they're always visible without scrolling.
+function StepFieldsEditor({ draft, patch }) {
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>Edit step</div>
-        <span className="flat-badge flat-badge-purple">Step {stepNumber}</span>
-      </div>
-
       <input value={draft.title} onChange={e => patch({ title: e.target.value })}
-        style={{ fontSize: 16, fontWeight: 800, border: 'none', padding: '6px 0', width: '100%', background: 'transparent' }} />
+        style={{ fontSize: 15, fontWeight: 800, border: 'none', padding: '4px 0', width: '100%', background: 'transparent' }} />
       <textarea value={draft.description} onChange={e => patch({ description: e.target.value })} rows={2}
         placeholder="What this step is for…" style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 10 }} />
 
@@ -451,16 +472,31 @@ function EditStepPanel({ stepNumber, draft, patch, dirty, saving, onPublish }) {
             addLabel={draft.step_type === 'Upload' ? '+ Add file to request' : draft.step_type === 'Learn' ? '+ Add video' : draft.step_type === 'Check' ? '+ Add question' : '+ Add field'} />
         </div>
       )}
+    </div>
+  );
+}
 
-      <div style={{ marginTop: 4 }}>
+// Right-hand panel: behavior toggles, reminder cadence, and the publish
+// button for whichever step is currently expanded in the canvas.
+function StepSettingsPanel({ stepNumber, draft, patch, dirty, saving, onPublish }) {
+  const meta = stepMeta(draft.step_type);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>Step settings</div>
+        <span className="flat-badge flat-badge-purple">Step {stepNumber}</span>
+      </div>
+
+      <div>
         <Toggle label="Required to continue" sub="Blocks later steps until done" checked={draft.required_to_continue} onChange={v => patch({ required_to_continue: v })} />
         <Toggle label="Allow skip for now" sub="They can come back to it" checked={draft.allow_skip} onChange={v => patch({ allow_skip: v })} />
-        <Toggle label="Notify a staff reviewer" sub="Emails your admins/owners on completion" checked={draft.notify_reviewer} onChange={v => patch({ notify_reviewer: v })} />
+        <Toggle label="Notify a staff reviewer" sub="Sends to the intake inbox" checked={draft.notify_reviewer} onChange={v => patch({ notify_reviewer: v })} />
         <Toggle label="Auto-advance on pass" sub="No manual approval needed" checked={draft.auto_advance} onChange={v => patch({ auto_advance: v })} />
       </div>
 
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Reminder cadence</div>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)', marginBottom: 8 }}>Reminder cadence</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {[['off', 'Off'], ['3days', 'Every 3 days'], ['weekly', 'Weekly']].map(([v, l]) => (
             <button key={v} type="button" className={`flat-tab ${draft.reminder_cadence === v ? 'selected' : ''}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => patch({ reminder_cadence: v })}>{l}</button>
