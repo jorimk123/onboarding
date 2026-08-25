@@ -188,6 +188,7 @@ const NAV_ITEMS = [
   { to: '/overview', label: 'Overview', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '50%' },
   { to: '/clients', label: 'People', chip: 'rgba(255,157,192,.22)', dot: '#e0538a', r: '50%' },
   { to: '/journeys', label: 'Templates', chip: 'rgba(34,169,140,.16)', dot: '#22a98c', r: '3px' },
+  { to: '/journeys', label: 'Journey builder', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '3px' },
   { to: '/portal', label: 'Member portal', chip: 'rgba(91,79,214,.14)', dot: '#9a92ff', r: '50%' },
   { to: '/team', label: 'Team', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '3px' },
   { to: '/webhooks', label: 'Webhooks', chip: 'rgba(30,40,80,.08)', dot: 'rgba(30,40,80,.5)', r: '3px' },
@@ -215,7 +216,7 @@ function Layout({ children, crumb, title, actions }) {
         </div>
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(item => (
-            <NavLink key={item.to} to={item.to} className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+            <NavLink key={item.label} to={item.to} className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
               <span className="nav-chip" style={{ background: item.chip }}><span style={{ width: 8, height: 8, borderRadius: item.r, background: item.dot, display: 'block' }} /></span>
               <span style={{ flex: 1 }}>{item.label}</span>
             </NavLink>
@@ -265,6 +266,7 @@ function JourneysPage() {
   const [editing, setEditing] = useState(null);
   const [sharing, setSharing] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [openMenuId, setOpenMenuId] = useState(null);
   const toast = useToast();
   const nav = useNavigate();
   const load = () => { setLoading(true); api.getJourneys().then(setJourneys).finally(() => setLoading(false)); };
@@ -307,14 +309,23 @@ function JourneysPage() {
               const cat = categoryMeta(j.category);
               return (
                 <div key={j.id} onClick={() => nav(`/journeys/${j.id}`)} className="flat-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 200, cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
                     <span style={{ width: 8, height: 8, borderRadius: 3, background: cat.dot }} />
                     <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: cat.text }}>{cat.id}</span>
                     <div style={{ flex: 1 }} />
-                    <button onClick={e => { e.stopPropagation(); setSharing(j); }} className="btn btn-ghost btn-sm">Share</button>
-                    <button onClick={e => { e.stopPropagation(); setEditing(j); }} className="btn btn-ghost btn-sm">Edit</button>
-                    <button onClick={e => toggleArchive(j, e)} className="btn btn-ghost btn-sm">{j.archived_at ? 'Unarchive' : 'Archive'}</button>
-                    <button onClick={e => del(j.id, j.name, e)} className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}>✕</button>
+                    <button onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === j.id ? null : j.id); }}
+                      className="btn btn-ghost btn-sm" style={{ fontSize: 16, padding: '4px 9px', lineHeight: 1 }} title="More actions">⋯</button>
+                    {openMenuId === j.id && (
+                      <>
+                        <div onClick={e => { e.stopPropagation(); setOpenMenuId(null); }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                        <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: 30, right: 0, zIndex: 41, background: '#fff', borderRadius: 12, border: '1px solid var(--flat-border-strong)', boxShadow: 'var(--flat-shadow)', minWidth: 150, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <button onClick={() => { setOpenMenuId(null); setSharing(j); }} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', width: '100%' }}>Share</button>
+                          <button onClick={() => { setOpenMenuId(null); setEditing(j); }} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', width: '100%' }}>Edit</button>
+                          <button onClick={e => { setOpenMenuId(null); toggleArchive(j, e); }} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', width: '100%' }}>{j.archived_at ? 'Unarchive' : 'Archive'}</button>
+                          <button onClick={e => { setOpenMenuId(null); del(j.id, j.name, e); }} className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', width: '100%', color: 'var(--red)' }}>Delete</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)', marginTop: 10 }}>{j.name}</div>
                   <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text2)', marginTop: 4, flex: 1 }}>{j.description || 'No description yet.'}</div>

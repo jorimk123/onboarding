@@ -9,6 +9,100 @@ const NOTES = [
   { t: 'Assigned automatically', d: 'Assigning a journey to a client immediately sends their welcome email.' },
 ];
 
+// Converts a YouTube watch/share URL into an embeddable URL. Falls back to
+// the raw URL for anything else (Vimeo, direct mp4 links, etc.) — <iframe>
+// still renders those fine in most cases.
+function toEmbedUrl(url) {
+  if (!url) return null;
+  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+  return m ? `https://www.youtube.com/embed/${m[1]}` : url;
+}
+
+// One typed field, rendered as a real, interactive (but not persisted)
+// input so you can click through and test what a client would see —
+// answers just live in local state and reset on refresh.
+function FieldPreview({ f }) {
+  const [val, setVal] = useState('');
+  const [checked, setChecked] = useState(false);
+  const [choice, setChoice] = useState('');
+  const inputStyle = { fontSize: 12.5 };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 5 }}>{f.label || 'Untitled question'}</div>
+      {f.type === 'Short text' && <input value={val} onChange={e => setVal(e.target.value)} placeholder="Type an answer…" style={inputStyle} />}
+      {f.type === 'Long text' && <textarea value={val} onChange={e => setVal(e.target.value)} rows={2} placeholder="Type an answer…" style={inputStyle} />}
+      {f.type === 'Email' && <input type="email" value={val} onChange={e => setVal(e.target.value)} placeholder="name@email.com" style={inputStyle} />}
+      {f.type === 'Phone' && <input type="tel" value={val} onChange={e => setVal(e.target.value)} placeholder="(555) 555-5555" style={inputStyle} />}
+      {f.type === 'Date' && <input type="date" value={val} onChange={e => setVal(e.target.value)} style={inputStyle} />}
+      {f.type === 'Dropdown' && (
+        <select value={val} onChange={e => setVal(e.target.value)} style={inputStyle}>
+          <option value="">Choose…</option>
+          {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )}
+      {f.type === 'Multiple choice' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {(f.options || []).map(o => (
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>
+              <input type="radio" style={{ width: 'auto' }} checked={choice === o} onChange={() => setChoice(o)} />{o}
+            </label>
+          ))}
+        </div>
+      )}
+      {f.type === 'Yes / No' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          {['Yes', 'No'].map(o => (
+            <button key={o} type="button" className={`flat-tab ${choice === o ? 'selected' : ''}`} onClick={() => setChoice(o)}>{o}</button>
+          ))}
+        </div>
+      )}
+      {f.type === 'Checkbox' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={checked} onChange={() => setChecked(c => !c)} /> I agree
+        </label>
+      )}
+      {f.type === 'Upload' && <button type="button" className="btn btn-secondary btn-sm">Choose file…</button>}
+      {f.type === 'Video' && (
+        f.url ? (
+          <div style={{ borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9', background: '#000' }}>
+            <iframe src={toEmbedUrl(f.url)} title={f.label} style={{ width: '100%', height: '100%', border: 'none' }} allowFullScreen />
+          </div>
+        ) : <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)', fontStyle: 'italic' }}>No video link added yet — add one in the Journey Builder.</div>
+      )}
+    </div>
+  );
+}
+
+// The expanded body of a step: DocuSeal / booking get a dedicated card,
+// everything else (Form, Upload, Learn, Check) renders its field list.
+function StepPreviewBody({ task }) {
+  if (task.step_type === 'Sign') {
+    return (
+      <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,.75)', border: '1px solid rgba(255,255,255,.9)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 4 }}>DocuSeal signature</div>
+        <div style={{ fontSize: 12, color: 'rgba(30,40,80,.6)', marginBottom: 8 }}>
+          {task.docuseal_template_id ? `Document ready to sign (template ${task.docuseal_template_id}).` : 'No DocuSeal template set up yet — add one in the Journey Builder.'}
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={!task.docuseal_template_id}>Open document to sign</button>
+      </div>
+    );
+  }
+  if (task.step_type === 'Book') {
+    return (
+      <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,.75)', border: '1px solid rgba(255,255,255,.9)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 6 }}>Schedule a call</div>
+        {task.booking_url
+          ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Open booking page →</a>
+          : <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)' }}>No booking link added yet — add one in the Journey Builder.</div>}
+      </div>
+    );
+  }
+  const fields = task.fields || [];
+  if (fields.length === 0) return <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)' }}>Nothing configured on this step yet.</div>;
+  return <div>{fields.map(f => <FieldPreview key={f.id} f={f} />)}</div>;
+}
+
 export default function MemberPortalPreviewPage() {
   const [searchParams] = useSearchParams();
   const presetId = searchParams.get('journey');
@@ -16,6 +110,7 @@ export default function MemberPortalPreviewPage() {
   const [journeyId, setJourneyId] = useState(presetId || '');
   const [journey, setJourney] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expandedStepId, setExpandedStepId] = useState(null);
 
   useEffect(() => {
     api.getJourneys().then(js => {
@@ -26,13 +121,13 @@ export default function MemberPortalPreviewPage() {
     }).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { if (journeyId) api.getJourney(journeyId).then(setJourney); }, [journeyId]);
+  useEffect(() => { if (journeyId) { api.getJourney(journeyId).then(setJourney); setExpandedStepId(null); } }, [journeyId]);
 
   const allTasks = journey ? journey.sections.flatMap(s => s.tasks) : [];
 
   return (
     <div className="page" style={{ paddingTop: 0 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>What a client sees</div>
@@ -42,7 +137,7 @@ export default function MemberPortalPreviewPage() {
             </select>
           </div>
           <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--text2)', maxWidth: '54ch' }}>
-            This is a preview of the journey structure, not a specific client's live progress — every task shows as not-yet-done here.
+            Click a step on the right to try it — answer questions, watch training videos, and see the DocuSeal / booking steps. Nothing here is saved.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 20 }}>
             {NOTES.map(n => (
@@ -62,7 +157,7 @@ export default function MemberPortalPreviewPage() {
         </div>
 
         <div style={{ padding: 13, borderRadius: 40, background: 'linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.5))', border: '1px solid rgba(255,255,255,.95)', boxShadow: '0 30px 60px -32px rgba(28,38,80,.45)' }}>
-          <div style={{ borderRadius: 30, overflow: 'hidden', background: 'linear-gradient(170deg,#eef0fb,#e2e6f8 55%,#e9e4f6)', padding: '22px 16px 24px', minHeight: 560, position: 'relative' }}>
+          <div style={{ borderRadius: 30, overflowY: 'auto', maxHeight: 720, background: 'linear-gradient(170deg,#eef0fb,#e2e6f8 55%,#e9e4f6)', padding: '22px 16px 24px', minHeight: 560, position: 'relative' }}>
             {loading || !journey ? <div className="spinner" /> : (
               <>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(30,40,80,.5)' }}>Welcome</div>
@@ -77,15 +172,27 @@ export default function MemberPortalPreviewPage() {
                   <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 600, color: 'rgba(30,40,80,.5)' }}>0 of {allTasks.length} steps complete</div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
-                  {allTasks.slice(0, 6).map((t, i) => (
-                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 16, background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.85)' }}>
-                      <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(30,40,80,.12)', color: 'rgba(30,40,80,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1a2038', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                  {allTasks.map((t, i) => {
+                    const expanded = expandedStepId === t.id;
+                    return (
+                      <div key={t.id} style={{ borderRadius: 16, background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.85)', overflow: 'hidden' }}>
+                        <div onClick={() => setExpandedStepId(expanded ? null : t.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', background: expanded ? '#5b4fd6' : 'rgba(30,40,80,.12)', color: expanded ? '#fff' : 'rgba(30,40,80,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#1a2038', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</div>
+                          </div>
+                          <span style={{ fontSize: 12, color: 'rgba(30,40,80,.45)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>⌄</span>
+                        </div>
+                        {expanded && (
+                          <div style={{ padding: '4px 12px 14px' }}>
+                            <StepPreviewBody task={t} />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {allTasks.length === 0 && <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)' }}>No steps in this journey yet.</div>}
                 </div>
               </>
