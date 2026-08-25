@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS journeys (
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
+-- Free-text category used to group/filter the template library (e.g.
+-- "Mentors", "Students", "Partners") — shown as a colored badge/tab.
+ALTER TABLE journeys ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE journeys ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 -- invites.journey_id references journeys, which is defined after invites —
 -- add the FK now that both tables exist (guarded: ADD CONSTRAINT has no

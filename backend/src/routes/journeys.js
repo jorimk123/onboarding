@@ -10,10 +10,14 @@ router.get('/', auth(), async (req, res) => {
         SELECT j.*, u.name AS created_by_name,
           (SELECT COUNT(*) FROM sections WHERE journey_id=j.id) AS section_count,
           (SELECT COUNT(*) FROM tasks t JOIN sections s ON t.section_id=s.id WHERE s.journey_id=j.id) AS task_count,
-          (SELECT COUNT(*) FROM client_journeys WHERE journey_id=j.id) AS client_count
+          (SELECT COUNT(*) FROM client_journeys WHERE journey_id=j.id) AS client_count,
+          (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - assigned_at)) / 86400)::numeric, 1)
+             FROM client_journeys WHERE journey_id=j.id AND completed_at IS NOT NULL) AS avg_days_to_complete
         FROM journeys j LEFT JOIN users u ON j.created_by=u.id
         WHERE j.business_id=$1 ORDER BY j.created_at DESC`, [req.user.business_id]);
       return res.json(rows);
+      // Note: archived_at is included on every row via j.* — the client filters
+      // active vs archived instead of a second query, since the full set is small.
     }
     const { rows } = await pool.query(`
       SELECT j.*, cj.assigned_at, cj.completed_at,
@@ -64,23 +68,26 @@ router.get('/:id', auth(), async (req, res) => {
 
 // POST /journeys
 router.post('/', auth('admin'), async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, category } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO journeys (business_id,name,description,created_by) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.user.business_id, name, description || null, req.user.id]
+      `INSERT INTO journeys (business_id,name,description,category,created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.business_id, name, description || null, category || null, req.user.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.put('/:id', auth('admin'), async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, category, archived } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE journeys SET name=$1,description=$2,updated_at=NOW() WHERE id=$3 AND business_id=$4 RETURNING *`,
-      [name, description || null, req.params.id, req.user.business_id]
+      `UPDATE journeys SET name=$1,description=$2,category=$3,
+         archived_at = CASE WHEN $4::boolean IS NULL THEN archived_at WHEN $4::boolean THEN COALESCE(archived_at, NOW()) ELSE NULL END,
+         updated_at=NOW()
+       WHERE id=$5 AND business_id=$6 RETURNING *`,
+      [name, description || null, category || null, archived === undefined ? null : archived, req.params.id, req.user.business_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);

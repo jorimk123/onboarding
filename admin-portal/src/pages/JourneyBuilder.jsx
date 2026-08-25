@@ -165,7 +165,7 @@ export default function JourneyBuilderPage() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 340px', gap: 18, alignItems: 'start' }}>
       {/* ── Add a step palette ── */}
-      <div className="card" style={{ padding: 16, position: 'sticky', top: 16 }}>
+      <div className="flat-card" style={{ padding: 16, position: 'sticky', top: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)', marginBottom: 10 }}>Add a step</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {STEP_TYPES.map(s => (
@@ -178,7 +178,7 @@ export default function JourneyBuilderPage() {
             </button>
           ))}
         </div>
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'var(--card-bg-tint)', fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.5 }}>
+        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'var(--flat-gray)', fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.5 }}>
           <strong style={{ display: 'block', color: 'var(--text)', marginBottom: 2 }}>Click to add to canvas</strong>
           Steps run in order. Anything marked optional can be skipped.
         </div>
@@ -190,12 +190,12 @@ export default function JourneyBuilderPage() {
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             {journeys.map(j => (
               <button key={j.id} onClick={() => nav(`/journeys/${j.id}`)}
-                className={`tag-pill ${j.id === id ? 'selected' : ''}`}>{j.name}</button>
+                className={`flat-tab ${j.id === id ? 'selected' : ''}`}>{j.name}</button>
             ))}
           </div>
         )}
 
-        <div className="card">
+        <div className="flat-card">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{journey.name}</div>
@@ -203,7 +203,7 @@ export default function JourneyBuilderPage() {
                 {steps.length} step{steps.length !== 1 ? 's' : ''}{totalDays ? ` · average ${totalDays} days to complete` : ''}
               </div>
             </div>
-            <span className="badge badge-teal">Live</span>
+            <span className="flat-badge flat-badge-teal">Live</span>
           </div>
 
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
@@ -213,12 +213,12 @@ export default function JourneyBuilderPage() {
               return (
                 <div key={task.id} onClick={() => setSelectedTaskId(task.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, cursor: 'pointer', border: selected ? '1.5px solid var(--purple-mid, #5b4fd6)' : '1.5px solid transparent', background: selected ? 'var(--purple-light)' : 'transparent' }}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: selected ? '#5b4fd6' : 'var(--card-bg-tint)', color: selected ? 'white' : 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: selected ? '#5b4fd6' : 'var(--flat-gray)', color: selected ? 'white' : 'var(--text2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{task.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{stepSummary(task)}</div>
                   </div>
-                  <span className="badge badge-purple">{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
+                  <span className="flat-badge flat-badge-purple">{meta.label === 'Quiz' ? 'QUIZ' : task.step_type.toUpperCase()}</span>
                   <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
                     <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveStep(task, -1)} title="Move up">↑</button>
                     <button className="btn btn-ghost btn-sm" disabled={i === steps.length - 1} onClick={() => moveStep(task, 1)} title="Move down">↓</button>
@@ -235,7 +235,7 @@ export default function JourneyBuilderPage() {
       </div>
 
       {/* ── Edit step panel ── */}
-      <div className="card" style={{ position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
+      <div className="flat-card" style={{ position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }}>
         {!selectedTask || !draft ? (
           <div style={{ padding: '20px 4px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Select a step to edit it here.</div>
         ) : (
@@ -308,7 +308,7 @@ function EditStepPanel({ stepNumber, draft, patch, dirty, saving, onPublish }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>Edit step</div>
-        <span className="badge badge-purple">Step {stepNumber}</span>
+        <span className="flat-badge flat-badge-purple">Step {stepNumber}</span>
       </div>
 
       <input value={draft.title} onChange={e => patch({ title: e.target.value })}
@@ -359,7 +359,7 @@ function EditStepPanel({ stepNumber, draft, patch, dirty, saving, onPublish }) {
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Reminder cadence</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {[['off', 'Off'], ['3days', 'Every 3 days'], ['weekly', 'Weekly']].map(([v, l]) => (
-            <button key={v} type="button" className={`tag-pill ${draft.reminder_cadence === v ? 'selected' : ''}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => patch({ reminder_cadence: v })}>{l}</button>
+            <button key={v} type="button" className={`flat-tab ${draft.reminder_cadence === v ? 'selected' : ''}`} style={{ flex: 1, justifyContent: 'center' }} onClick={() => patch({ reminder_cadence: v })}>{l}</button>
           ))}
         </div>
       </div>

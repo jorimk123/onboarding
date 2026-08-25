@@ -18,7 +18,25 @@
   --card-bg-tint:linear-gradient(165deg,rgba(154,146,255,.16),rgba(255,255,255,.55));
   --shadow-glass:inset 0 0 60px 10px rgba(255,255,255,.42),inset 1px 1px 0 rgba(255,255,255,.98),inset -1px -1px 0 rgba(120,215,190,.5),inset 8px 0 22px -22px rgba(190,150,255,.7),inset 0 -24px 40px -30px rgba(110,120,205,.45),0 20px 44px -22px rgba(52,46,96,.26);
   --shadow-glass-sm:inset 1px 1px 0 rgba(255,255,255,.98),0 16px 32px -20px rgba(52,46,96,.24);
+
+  /* Flat design tokens — used by the Templates library + Journey builder
+     pages, which moved to the flatter "prototype" look. Kept separate from
+     the glass tokens above so the rest of the app is unaffected. */
+  --flat-bg:#ffffff;--flat-border:rgba(20,20,50,.08);--flat-border-strong:rgba(20,20,50,.14);
+  --flat-radius:16px;--flat-shadow:0 1px 2px rgba(20,20,50,.04),0 10px 26px -16px rgba(20,20,50,.16);
+  --flat-gray:#f1f1f4;
 }
+.flat-card{background:var(--flat-bg);border:1px solid var(--flat-border);border-radius:var(--flat-radius);padding:18px 20px;box-shadow:var(--flat-shadow)}
+.flat-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.flat-tab{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--flat-border-strong);border-radius:20px;padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--text2);cursor:pointer}
+.flat-tab.selected{background:var(--purple);border-color:var(--purple);color:#fff}
+.flat-progress{height:6px;background:var(--flat-gray);border-radius:6px;overflow:hidden;min-width:60px}
+.flat-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--purple-mid),var(--purple));border-radius:6px}
+.flat-badge-purple{background:#eeecfd;color:#4a3fb0}
+.flat-badge-teal{background:#e1f5ee;color:#0f6e56}
+.flat-badge-amber{background:#fbeed9;color:#8a5a10}
+.flat-badge-pink{background:#fbe9f0;color:#993a5e}
+.flat-badge-gray{background:var(--flat-gray);color:var(--text2)}
 body{
   font-family:var(--font);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh;
   background:

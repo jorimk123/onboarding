@@ -248,17 +248,19 @@ function RequireAdmin({ children }) {
   return children;
 }
 
-const TEMPLATE_CHIPS = [
-  { bg: 'rgba(91,79,214,.16)', dot: '#5b4fd6' },
-  { bg: 'rgba(255,157,192,.2)', dot: '#e0538a' },
-  { bg: 'rgba(34,169,140,.16)', dot: '#22a98c' },
-  { bg: 'rgba(186,117,23,.16)', dot: '#ba7517' },
+const CATEGORIES = [
+  { id: 'Mentors', dot: '#5b4fd6', bg: '#eeecfd', text: '#4a3fb0' },
+  { id: 'Students', dot: '#e0538a', bg: '#fbe9f0', text: '#993a5e' },
+  { id: 'Partners', dot: '#22a98c', bg: '#e1f5ee', text: '#0f6e56' },
 ];
+const categoryMeta = id => CATEGORIES.find(c => c.id === id) || { id: 'Other', dot: '#8f8fa0', bg: '#f1f1f4', text: 'var(--text2)' };
 
 function JourneysPage() {
   const [journeys, setJourneys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [filter, setFilter] = useState('all');
   const toast = useToast();
   const nav = useNavigate();
   const load = () => { setLoading(true); api.getJourneys().then(setJourneys).finally(() => setLoading(false)); };
@@ -268,43 +270,66 @@ function JourneysPage() {
     if (!confirm(`Delete "${name}"?`)) return;
     await api.deleteJourney(id); toast('Deleted'); load();
   };
+  const toggleArchive = async (j, e) => {
+    e.stopPropagation();
+    await api.updateJourney(j.id, { name: j.name, description: j.description, category: j.category, archived: !j.archived_at });
+    toast(j.archived_at ? 'Unarchived' : 'Archived'); load();
+  };
+
+  const active = journeys.filter(j => !j.archived_at);
+  const archived = journeys.filter(j => j.archived_at);
+  const shown = filter === 'all' ? active : filter === 'Archived' ? archived : active.filter(j => j.category === filter);
+
   return (
     <Layout crumb="Journeys" title="Template library" actions={<button className="btn btn-primary" onClick={() => setShowCreate(true)}>New journey</button>}>
       <div className="page" style={{ paddingTop: 0 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span className={`flat-tab ${filter === 'all' ? 'selected' : ''}`} onClick={() => setFilter('all')}>All journeys</span>
+          {CATEGORIES.map(c => (
+            <span key={c.id} className={`flat-tab ${filter === c.id ? 'selected' : ''}`} onClick={() => setFilter(c.id)}>{c.id}</span>
+          ))}
+          <span className={`flat-tab ${filter === 'Archived' ? 'selected' : ''}`} onClick={() => setFilter('Archived')}>Archived</span>
+        </div>
         {loading ? <div className="spinner" /> : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 18 }}>
-            <div onClick={() => setShowCreate(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 10, minHeight: 210, padding: 24, borderRadius: 24, border: '1.5px dashed rgba(91,79,214,.4)', background: 'linear-gradient(165deg,rgba(154,146,255,.12),rgba(255,255,255,.55))', cursor: 'pointer' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 13, background: 'linear-gradient(150deg,var(--purple-mid),var(--purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, fontWeight: 700 }}>+</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Build from scratch</div>
-              <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text2)' }}>Start with an empty journey and add your own sections and tasks.</div>
-            </div>
-            {journeys.map((j, i) => {
-              const chip = TEMPLATE_CHIPS[i % TEMPLATE_CHIPS.length];
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+            {filter === 'all' && (
+              <div onClick={() => setShowCreate(true)} className="flat-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 10, minHeight: 200, border: '1.5px dashed var(--flat-border-strong)', cursor: 'pointer' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, fontWeight: 700 }}>+</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Build from scratch</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text3)' }}>Start with an empty journey and add your own steps, forms and checks.</div>
+              </div>
+            )}
+            {shown.map(j => {
+              const cat = categoryMeta(j.category);
               return (
-                <div key={j.id} onClick={() => nav(`/journeys/${j.id}`)} className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 210, cursor: 'pointer' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <span style={{ width: 28, height: 28, borderRadius: 10, background: chip.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 9, height: 9, borderRadius: 3, background: chip.dot }} /></span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text3)' }}>Journey</span>
+                <div key={j.id} onClick={() => nav(`/journeys/${j.id}`)} className="flat-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 200, cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 3, background: cat.dot }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: cat.text }}>{cat.id}</span>
                     <div style={{ flex: 1 }} />
-                    <button onClick={e => del(j.id, j.name, e)} className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}>Delete</button>
+                    <button onClick={e => { e.stopPropagation(); setEditing(j); }} className="btn btn-ghost btn-sm">Edit</button>
+                    <button onClick={e => toggleArchive(j, e)} className="btn btn-ghost btn-sm">{j.archived_at ? 'Unarchive' : 'Archive'}</button>
+                    <button onClick={e => del(j.id, j.name, e)} className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}>✕</button>
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)', marginTop: 12 }}>{j.name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)', marginTop: 10 }}>{j.name}</div>
                   <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text2)', marginTop: 4, flex: 1 }}>{j.description || 'No description yet.'}</div>
-                  <div style={{ display: 'flex', gap: 5, marginTop: 14 }}>
-                    {Array.from({ length: 6 }).map((_, si) => (
-                      <span key={si} style={{ flex: 1, height: 6, borderRadius: 6, background: si < Math.min(6, j.section_count) ? `linear-gradient(90deg, ${chip.dot}, ${chip.dot})` : 'rgba(30,40,80,.09)' }} />
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 11.5, fontWeight: 600, color: 'var(--text3)' }}>
-                    <span>{j.task_count} tasks</span><span>Used by {j.client_count} {j.client_count === 1 ? 'person' : 'people'}</span>
+                  {j.avg_days_to_complete != null && (
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 10 }}>Average {j.avg_days_to_complete} days to complete</div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: j.avg_days_to_complete != null ? 6 : 14, fontSize: 11.5, fontWeight: 600, color: 'var(--text3)' }}>
+                    <span>{j.task_count} steps</span><span>Used by {j.client_count} {j.client_count === 1 ? 'person' : 'people'}</span>
                   </div>
                 </div>
               );
             })}
+            {shown.length === 0 && filter !== 'all' && (
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: '30px 0' }}>Nothing here yet.</div>
+            )}
           </div>
         )}
       </div>
       {showCreate && <JourneyModal onClose={() => setShowCreate(false)} onSave={() => { setShowCreate(false); load(); }} />}
+      {editing && <JourneyModal initial={editing} onClose={() => setEditing(null)} onSave={() => { setEditing(null); load(); }} />}
     </Layout>
   );
 }
@@ -429,7 +454,7 @@ function OverviewPage() {
 }
 
 export function JourneyModal({ onClose, onSave, initial }) {
-  const [form, setForm] = useState({ name: initial?.name || '', description: initial?.description || '' });
+  const [form, setForm] = useState({ name: initial?.name || '', description: initial?.description || '', category: initial?.category || '' });
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const submit = async (e) => {
@@ -446,6 +471,14 @@ export function JourneyModal({ onClose, onSave, initial }) {
         <form onSubmit={submit}>
           <div className="form-group"><label>Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Standard Client Onboarding" /></div>
           <div className="form-group"><label>Description</label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} /></div>
+          <div className="form-group">
+            <label>Category</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {CATEGORIES.map(c => (
+                <span key={c.id} className={`flat-tab ${form.category === c.id ? 'selected' : ''}`} onClick={() => setForm(f => ({ ...f, category: f.category === c.id ? '' : c.id }))}>{c.id}</span>
+              ))}
+            </div>
+          </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
