@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 
 const NOTES = [
@@ -9,12 +10,22 @@ const NOTES = [
 ];
 
 export default function MemberPortalPreviewPage() {
+  const [searchParams] = useSearchParams();
+  const presetId = searchParams.get('journey');
   const [journeys, setJourneys] = useState([]);
-  const [journeyId, setJourneyId] = useState('');
+  const [journeyId, setJourneyId] = useState(presetId || '');
   const [journey, setJourney] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { api.getJourneys().then(js => { setJourneys(js); if (js[0]) setJourneyId(String(js[0].id)); }).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    api.getJourneys().then(js => {
+      setJourneys(js);
+      const preset = presetId && js.find(j => String(j.id) === String(presetId));
+      if (preset) setJourneyId(String(preset.id));
+      else if (js[0]) setJourneyId(String(js[0].id));
+    }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => { if (journeyId) api.getJourney(journeyId).then(setJourney); }, [journeyId]);
 
   const allTasks = journey ? journey.sections.flatMap(s => s.tasks) : [];

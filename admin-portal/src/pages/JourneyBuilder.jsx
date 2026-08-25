@@ -359,6 +359,12 @@ export default function JourneyBuilderPage() {
               </div>
             )}
           </div>
+
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--hairline)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-secondary" disabled={steps.length === 0} onClick={() => nav(`/portal?journey=${id}`)}>
+              Preview as a client →
+            </button>
+          </div>
         </div>
       </div>
 
