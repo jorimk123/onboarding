@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS sections (
 );
 
 -- ── Tasks ─────────────────────────────────────────────────────
+-- A task is one "step" in a journey. step_type drives how it's presented
+-- and behaves on the client side; fields holds the typed field defs for
+-- Form/Check(quiz)/Learn steps: [{id, label, type, options?, url?, required?}].
 CREATE TABLE IF NOT EXISTS tasks (
   id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   section_id            UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
@@ -108,6 +111,15 @@ CREATE TABLE IF NOT EXISTS tasks (
   docuseal_trigger      TEXT DEFAULT 'assignment' CHECK (docuseal_trigger IN ('assignment','completion')),
   created_at            TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Step-type / typed-field system (added post-launch).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_type TEXT NOT NULL DEFAULT 'Form'
+  CHECK (step_type IN ('Form','Upload','Sign','Check','Learn','Book','Pay'));
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS fields JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS booking_url TEXT;                -- step_type='Book'
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_amount_cents INT;        -- step_type='Pay'
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_currency TEXT DEFAULT 'usd';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checkr_package TEXT;             -- step_type='Check', non-quiz
 
 -- ── Client Journey Assignments ────────────────────────────────
 CREATE TABLE IF NOT EXISTS client_journeys (
@@ -129,6 +141,47 @@ CREATE TABLE IF NOT EXISTS task_completions (
   task_id      UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   completed_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(client_id, task_id)
+);
+
+-- ── Task Field Responses ───────────────────────────────────────
+-- Per-field answers a client gives on a Form/Quiz/Learn step. task_completions
+-- (above) still tracks whether the *step* is done; this holds the actual
+-- typed answers behind it.
+CREATE TABLE IF NOT EXISTS task_responses (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id      UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  field_id     TEXT NOT NULL,
+  value        JSONB,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(client_id, task_id, field_id)
+);
+
+-- ── Background Checks (Checkr) ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS background_checks (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id             UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  checkr_candidate_id TEXT,
+  checkr_report_id    TEXT,
+  status              TEXT DEFAULT 'pending' CHECK (status IN ('pending','clear','consider','suspended','failed')),
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  completed_at        TIMESTAMPTZ
+);
+
+-- ── Payments (Stripe) ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS payments (
+  id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id                UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  stripe_session_id      TEXT,
+  stripe_payment_intent  TEXT,
+  amount_cents           INT,
+  currency               TEXT DEFAULT 'usd',
+  status                 TEXT DEFAULT 'pending' CHECK (status IN ('pending','paid','failed')),
+  created_at             TIMESTAMPTZ DEFAULT NOW(),
+  paid_at                TIMESTAMPTZ
 );
 
 -- ── DocuSeal Submissions ──────────────────────────────────────
@@ -176,6 +229,9 @@ CREATE INDEX IF NOT EXISTS idx_cj_journey          ON client_journeys(journey_id
 CREATE INDEX IF NOT EXISTS idx_tc_client           ON task_completions(client_id);
 CREATE INDEX IF NOT EXISTS idx_tc_task             ON task_completions(task_id);
 CREATE INDEX IF NOT EXISTS idx_ds_client           ON docuseal_submissions(client_id);
+CREATE INDEX IF NOT EXISTS idx_tr_client_task      ON task_responses(client_id, task_id);
+CREATE INDEX IF NOT EXISTS idx_bc_client           ON background_checks(client_id);
+CREATE INDEX IF NOT EXISTS idx_pay_client          ON payments(client_id);
 CREATE INDEX IF NOT EXISTS idx_wd_endpoint         ON webhook_deliveries(endpoint_id);
 CREATE INDEX IF NOT EXISTS idx_users_business      ON users(business_id);
 CREATE INDEX IF NOT EXISTS idx_journeys_business   ON journeys(business_id);

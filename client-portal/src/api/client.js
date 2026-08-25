@@ -20,4 +20,6 @@ export const api = {
   getJourney: (id) => req('GET', `/journeys/${id}`),
   completeTask: (taskId) => req('POST', `/progress/tasks/${taskId}/complete`),
   uncompleteTask: (taskId) => req('DELETE', `/progress/tasks/${taskId}/complete`),
+  saveField: (taskId, fieldId, value) => req('POST', `/progress/tasks/${taskId}/fields/${fieldId}`, { value }),
+  pay: (taskId) => req('POST', `/progress/tasks/${taskId}/pay`),
 };

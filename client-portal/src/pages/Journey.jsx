@@ -1,33 +1,318 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast, useAuth } from '../main';
+
+// ── helpers ──────────────────────────────────────────────────────
+function youtubeId(url) {
+  if (!url) return null;
+  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/);
+  return m ? m[1] : null;
+}
+
+function isQuizStep(task) {
+  return task.step_type === 'Check' && (task.fields || []).some(f => f.type === 'Multiple choice');
+}
+function isBgCheckStep(task) {
+  return task.step_type === 'Check' && !isQuizStep(task);
+}
+
+// ── signature pad ────────────────────────────────────────────────
+function SignaturePad({ value, onSave, disabled }) {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.strokeStyle = '#1a2333'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    if (value) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0); img.src = value; }
+  }, []);
+  const pos = e => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return [p.clientX - r.left, p.clientY - r.top];
+  };
+  const start = e => { if (disabled) return; drawing.current = true; const [x, y] = pos(e); canvasRef.current.getContext('2d').beginPath(); canvasRef.current.getContext('2d').moveTo(x, y); };
+  const move = e => { if (disabled || !drawing.current) return; e.preventDefault(); const [x, y] = pos(e); const ctx = canvasRef.current.getContext('2d'); ctx.lineTo(x, y); ctx.stroke(); };
+  const end = () => { if (!drawing.current) return; drawing.current = false; onSave(canvasRef.current.toDataURL('image/png')); };
+  const clear = () => { const c = canvasRef.current; c.getContext('2d').clearRect(0, 0, c.width, c.height); onSave(''); };
+  return (
+    <div>
+      <canvas ref={canvasRef} width={420} height={130} style={{ width: '100%', maxWidth: 420, height: 130, border: '1.5px dashed var(--border-dark)', borderRadius: 10, background: 'white', touchAction: 'none', cursor: disabled ? 'default' : 'crosshair' }}
+        onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end} />
+      {!disabled && <button type="button" onClick={clear} style={{ marginTop: 6, background: 'none', border: 'none', color: 'var(--text3)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Clear signature</button>}
+    </div>
+  );
+}
+
+// ── YouTube embed w/ watched detection ──────────────────────────
+function YouTubeField({ url, watched, onWatched }) {
+  const vid = youtubeId(url);
+  const containerId = useRef(`yt-${Math.random().toString(36).slice(2)}`).current;
+  const playerRef = useRef(null);
+
+  useEffect(() => {
+    if (!vid) return;
+    let cancelled = false;
+    function makePlayer() {
+      if (cancelled || !window.YT || !window.YT.Player) return;
+      playerRef.current = new window.YT.Player(containerId, {
+        videoId: vid,
+        events: {
+          onStateChange: (e) => { if (e.data === window.YT.PlayerState.ENDED) onWatched(); },
+        },
+      });
+    }
+    if (window.YT && window.YT.Player) makePlayer();
+    else {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { prev && prev(); makePlayer(); };
+      if (!document.getElementById('yt-iframe-api')) {
+        const s = document.createElement('script'); s.id = 'yt-iframe-api'; s.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(s);
+      }
+    }
+    return () => { cancelled = true; };
+  }, [vid]);
+
+  if (!vid) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>No video URL set for this step.</div>;
+  return (
+    <div>
+      <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+        <div id={containerId} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: watched ? 'var(--teal)' : 'var(--text3)' }}>
+        {watched ? '✓ Watched' : 'Watch the full video to mark this step complete'}
+      </div>
+    </div>
+  );
+}
+
+// ── generic field input by type ─────────────────────────────────
+function FieldInput({ field, value, onChange, disabled }) {
+  const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 14, fontFamily: 'inherit', background: disabled ? '#f7f8fa' : 'white' };
+  switch (field.type) {
+    case 'Long text':
+      return <textarea rows={3} disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} />;
+    case 'Email':
+      return <input type="email" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+    case 'Phone':
+      return <input type="tel" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+    case 'Date':
+      return <input type="date" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+    case 'Dropdown':
+      return (
+        <select disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle}>
+          <option value="">Select…</option>
+          {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    case 'Multiple choice':
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(field.options || []).map(o => (
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: value === o ? '1.5px solid var(--teal)' : '1.5px solid var(--border)', background: value === o ? 'var(--teal-light)' : 'white', cursor: disabled ? 'default' : 'pointer', fontSize: 14 }}>
+              <input type="radio" name={field.id} disabled={disabled} checked={value === o} onChange={() => onChange(o)} />
+              {o}
+            </label>
+          ))}
+        </div>
+      );
+    case 'Yes/No':
+      return (
+        <div style={{ display: 'flex', gap: 10 }}>
+          {['Yes', 'No'].map(o => (
+            <button key={o} type="button" disabled={disabled} onClick={() => onChange(o)}
+              style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: value === o ? '1.5px solid var(--teal)' : '1.5px solid var(--border)', background: value === o ? 'var(--teal-light)' : 'white', color: value === o ? 'var(--teal-dark)' : 'var(--text)', fontWeight: 600, cursor: disabled ? 'default' : 'pointer' }}>
+              {o}
+            </button>
+          ))}
+        </div>
+      );
+    case 'Checkbox':
+      return (
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: disabled ? 'default' : 'pointer', fontSize: 13.5, color: 'var(--text2)' }}>
+          <input type="checkbox" disabled={disabled} checked={!!value} onChange={e => onChange(e.target.checked)} style={{ marginTop: 2 }} />
+          <span>{field.label}</span>
+        </label>
+      );
+    case 'Upload': {
+      const onFile = e => {
+        const f = e.target.files?.[0]; if (!f) return;
+        if (f.size > 5 * 1024 * 1024) { onChange({ error: 'File must be under 5MB' }); return; }
+        const reader = new FileReader();
+        reader.onload = () => onChange({ name: f.name, size: f.size, dataUrl: reader.result });
+        reader.readAsDataURL(f);
+      };
+      return (
+        <div>
+          <input type="file" disabled={disabled} onChange={onFile} style={{ fontSize: 13 }} />
+          {value?.name && <div style={{ fontSize: 12.5, color: 'var(--teal-dark)', marginTop: 6 }}>📎 {value.name}</div>}
+          {value?.error && <div style={{ fontSize: 12.5, color: '#c0392b', marginTop: 6 }}>{value.error}</div>}
+        </div>
+      );
+    }
+    case 'Signature':
+      return <SignaturePad value={value} disabled={disabled} onSave={onChange} />;
+    case 'Video':
+      return <YouTubeField url={field.url} watched={!!value?.watched} onWatched={() => onChange({ watched: true })} />;
+    default: // Short text
+      return <input type="text" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+  }
+}
+
+// ── quiz runner (one question per screen) ───────────────────────
+function QuizRunner({ task, answers, onAnswer, onFinish }) {
+  const questions = (task.fields || []).filter(f => f.type === 'Multiple choice');
+  const [qi, setQi] = useState(0);
+  const q = questions[qi];
+  if (!q) return null;
+  const answered = answers[q.id] != null;
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', marginBottom: 10 }}>Question {qi + 1} of {questions.length}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>{q.label}</div>
+      <FieldInput field={q} value={answers[q.id]} onChange={v => onAnswer(q.id, v)} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+        <button className="btn btn-secondary btn-sm" disabled={qi === 0} onClick={() => setQi(i => i - 1)}>← Back</button>
+        {qi < questions.length - 1
+          ? <button className="btn btn-primary btn-sm" disabled={!answered} onClick={() => setQi(i => i + 1)}>Next →</button>
+          : <button className="btn btn-primary btn-sm" disabled={!answered} onClick={onFinish}>Finish quiz ✓</button>}
+      </div>
+    </div>
+  );
+}
+
+// ── one task's expandable body ──────────────────────────────────
+function TaskBody({ task, onSaveField, onComplete, onUncomplete, onPay, toast }) {
+  const [answers, setAnswers] = useState(task.responses || {});
+  const [busy, setBusy] = useState(false);
+
+  const save = async (fieldId, value) => {
+    setAnswers(a => ({ ...a, [fieldId]: value }));
+    try { await onSaveField(task.id, fieldId, value); }
+    catch (err) { toast(err.message, 'error'); }
+  };
+
+  const requiredFields = (task.fields || []).filter(f => f.required !== false);
+  const allRequiredFilled = requiredFields.every(f => {
+    const v = answers[f.id];
+    return f.type === 'Checkbox' ? true : v !== undefined && v !== null && v !== '';
+  });
+
+  if (isQuizStep(task)) {
+    return (
+      <QuizRunner task={task} answers={answers} onAnswer={save} onFinish={async () => {
+        setBusy(true);
+        try { await onComplete(task.id); toast('Quiz submitted ✓'); } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+      }} />
+    );
+  }
+
+  if (isBgCheckStep(task)) {
+    const consentField = (task.fields || []).find(f => f.type === 'Checkbox') || { id: 'consent', type: 'Checkbox', label: 'I consent to a background check being run.' };
+    const consented = !!answers[consentField.id];
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description || 'This step runs a real background check via our screening provider.'}</p>
+        <FieldInput field={consentField} value={answers[consentField.id]} disabled={consented || task.completed} onChange={v => save(consentField.id, v)} />
+        {consented && !task.completed && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: 'var(--text3)' }}>⏳ Background check submitted — awaiting results.</div>}
+      </div>
+    );
+  }
+
+  if (task.step_type === 'Pay') {
+    const amount = task.payment_amount_cents != null ? `$${(task.payment_amount_cents / 100).toFixed(2)} ${(task.payment_currency || 'usd').toUpperCase()}` : null;
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
+        {task.completed
+          ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Payment received</div>
+          : (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={async () => {
+              setBusy(true);
+              try { const { url } = await onPay(task.id); window.location.href = url; }
+              catch (err) { toast(err.message, 'error'); setBusy(false); }
+            }}>{amount ? `Pay ${amount}` : 'Pay now'}</button>
+          )}
+      </div>
+    );
+  }
+
+  if (task.step_type === 'Book') {
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
+        {task.booking_url
+          ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex' }}>Schedule a time →</a>
+          : <div style={{ fontSize: 13, color: 'var(--text3)' }}>No booking link has been set up yet.</div>}
+        {!task.completed && (
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onComplete(task.id)}>I've scheduled it</button>
+        )}
+      </div>
+    );
+  }
+
+  if (task.step_type === 'Sign') {
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
+        {task.docuseal_template_id
+          ? <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 12 }}>📄 A document was sent to your email to sign. Once you've signed it, mark this step complete.</div>
+          : null}
+        {!task.completed
+          ? <button className="btn btn-primary btn-sm" onClick={() => onComplete(task.id)}>Mark as signed ✓</button>
+          : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Signed</div>}
+      </div>
+    );
+  }
+
+  // Form / Upload / Learn — render each field, manual complete when required ones are filled
+  return (
+    <div>
+      {task.description && <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 14 }}>{task.description}</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {(task.fields || []).map(f => (
+          <div key={f.id}>
+            {f.type !== 'Checkbox' && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{f.label}{f.required !== false && <span style={{ color: '#c0392b' }}> *</span>}</label>}
+            <FieldInput field={f} value={answers[f.id]} disabled={task.completed} onChange={v => save(f.id, v)} />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        {task.completed
+          ? <button className="btn btn-secondary btn-sm" onClick={() => onUncomplete(task.id)}>Mark as not done</button>
+          : <button className="btn btn-primary btn-sm" disabled={!allRequiredFilled} onClick={() => onComplete(task.id)}>Mark complete ✓</button>}
+      </div>
+    </div>
+  );
+}
+
+const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🛡️', Learn: '▶️', Book: '📅', Pay: '💳' };
 
 export default function JourneyPage() {
   const { id } = useParams(); const nav = useNavigate();
   const toast = useToast(); const { user, logout } = useAuth();
   const [journey, setJourney] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(new Set());
+  const [expanded, setExpanded] = useState(new Set());
 
   const load = useCallback(() => {
     api.getJourney(id).then(setJourney).catch(() => nav('/')).finally(() => setLoading(false));
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  const toggleTask = async (task) => {
-    if (toggling.has(task.id)) return;
-    setToggling(s => new Set([...s, task.id]));
-    setJourney(j => ({ ...j, sections: j.sections.map(s => ({ ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t) })) }));
-    try {
-      if (task.completed) await api.uncompleteTask(task.id);
-      else { await api.completeTask(task.id); toast('Task completed ✓'); }
-      load();
-    } catch (err) {
-      setJourney(j => ({ ...j, sections: j.sections.map(s => ({ ...s, tasks: s.tasks.map(t => t.id === task.id ? { ...t, completed: task.completed } : t) })) }));
-      toast(err.message, 'error');
-    } finally { setToggling(s => { const n = new Set(s); n.delete(task.id); return n; }); }
+  const toggleExpanded = (taskId) => setExpanded(s => { const n = new Set(s); n.has(taskId) ? n.delete(taskId) : n.add(taskId); return n; });
+
+  const complete = async (taskId) => {
+    try { await api.completeTask(taskId); toast('Task completed ✓'); load(); } catch (err) { toast(err.message, 'error'); }
   };
+  const uncomplete = async (taskId) => {
+    try { await api.uncompleteTask(taskId); load(); } catch (err) { toast(err.message, 'error'); }
+  };
+  const saveField = (taskId, fieldId, value) => api.saveField(taskId, fieldId, value);
+  const pay = (taskId) => api.pay(taskId);
 
   if (loading) return <div className="spinner" />;
   if (!journey) return null;
@@ -94,25 +379,34 @@ export default function JourneyPage() {
                   </div>
                   <span className={`badge ${secComplete ? 'badge-teal' : 'badge-gray'}`}>{secDone}/{section.tasks.length}</span>
                 </div>
-                {section.tasks.map((task, ti) => (
-                  <div key={task.id} onClick={() => toggleTask(task)} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', borderBottom: ti < section.tasks.length - 1 ? '1px solid var(--border)' : 'none', cursor: toggling.has(task.id) ? 'wait' : 'pointer', background: task.completed ? '#fafffe' : 'white', transition: 'background .12s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = task.completed ? '#f0fbf7' : '#f9fafb'}
-                    onMouseLeave={e => e.currentTarget.style.background = task.completed ? '#fafffe' : 'white'}>
-                    <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, marginTop: 1, border: task.completed ? '2px solid var(--teal)' : '2px solid var(--border-dark)', background: task.completed ? 'var(--teal)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s', opacity: toggling.has(task.id) ? .5 : 1 }}>
-                      {task.completed && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500, color: task.completed ? 'var(--text3)' : 'var(--text)', textDecoration: task.completed ? 'line-through' : 'none', transition: 'all .2s' }}>{task.title}</div>
-                      {task.description && <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 3 }}>{task.description}</div>}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {task.tag && <span className="badge badge-purple">{task.tag}</span>}
-                        {task.assignee && <span style={{ fontSize: 12, color: 'var(--text3)' }}>👤 {task.assignee}</span>}
-                        {task.docuseal_template_id && <span className="badge badge-teal">📄 Requires signature</span>}
+                {section.tasks.map((task, ti) => {
+                  const isOpen = expanded.has(task.id);
+                  return (
+                    <div key={task.id} style={{ borderBottom: ti < section.tasks.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div onClick={() => toggleExpanded(task.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', cursor: 'pointer', background: task.completed ? '#fafffe' : 'white', transition: 'background .12s' }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, marginTop: 1, border: task.completed ? '2px solid var(--teal)' : '2px solid var(--border-dark)', background: task.completed ? 'var(--teal)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {task.completed && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: task.completed ? 'var(--text3)' : 'var(--text)', textDecoration: task.completed ? 'line-through' : 'none' }}>{STEP_ICON[task.step_type] || ''} {task.title}</div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {task.tag && <span className="badge badge-purple">{task.tag}</span>}
+                            {task.assignee && <span style={{ fontSize: 12, color: 'var(--text3)' }}>👤 {task.assignee}</span>}
+                            {isQuizStep(task) && <span className="badge badge-teal">Quiz</span>}
+                            {isBgCheckStep(task) && <span className="badge badge-teal">Background check</span>}
+                          </div>
+                        </div>
+                        {task.completed && <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 500, flexShrink: 0, marginTop: 2 }}>Done ✓</div>}
+                        <span style={{ color: 'var(--text3)', fontSize: 12, marginTop: 3 }}>{isOpen ? '▲' : '▼'}</span>
                       </div>
+                      {isOpen && (
+                        <div style={{ padding: '4px 20px 20px 54px' }} onClick={e => e.stopPropagation()}>
+                          <TaskBody task={task} onSaveField={saveField} onComplete={complete} onUncomplete={uncomplete} onPay={pay} toast={toast} />
+                        </div>
+                      )}
                     </div>
-                    {task.completed && <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 500, flexShrink: 0, marginTop: 2 }}>Done ✓</div>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })}

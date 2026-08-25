@@ -40,12 +40,23 @@ router.get('/:id', auth(), async (req, res) => {
     const { rows: tasks } = await pool.query(
       `SELECT t.* FROM tasks t JOIN sections s ON t.section_id=s.id WHERE s.journey_id=$1 ORDER BY t.position`, [journey.id]);
     let completedTaskIds = [];
+    let responsesByTask = {};
     if (req.user.role === 'client') {
       const { rows: c } = await pool.query('SELECT task_id FROM task_completions WHERE client_id=$1', [req.user.id]);
       completedTaskIds = c.map(x => x.task_id);
+      const { rows: r } = await pool.query(
+        `SELECT tr.task_id, tr.field_id, tr.value FROM task_responses tr
+         JOIN tasks t ON t.id=tr.task_id JOIN sections s2 ON t.section_id=s2.id
+         WHERE tr.client_id=$1 AND s2.journey_id=$2`, [req.user.id, journey.id]
+      );
+      for (const row of r) {
+        (responsesByTask[row.task_id] ||= {})[row.field_id] = row.value;
+      }
     }
     journey.sections = sections.map(s => ({
-      ...s, tasks: tasks.filter(t => t.section_id === s.id).map(t => ({ ...t, completed: completedTaskIds.includes(t.id) }))
+      ...s, tasks: tasks.filter(t => t.section_id === s.id).map(t => ({
+        ...t, completed: completedTaskIds.includes(t.id), responses: responsesByTask[t.id] || {}
+      }))
     }));
     res.json(journey);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
@@ -112,26 +123,56 @@ router.delete('/:id/sections/:sid', auth('admin'), assertOwnsJourney, async (req
   res.status(204).end();
 });
 
-// ── Tasks (include DocuSeal fields) ───────────────────────────
+// ── Tasks ───────────────────────────────────────────────────────
+// step_type: Form | Upload | Sign | Check | Learn | Book | Pay
+// fields: [{ id, label, type, options?: string[], url?: string, required?: bool }]
+const STEP_TYPES = ['Form', 'Upload', 'Sign', 'Check', 'Learn', 'Book', 'Pay'];
+
+function normalizeFields(fields) {
+  if (!Array.isArray(fields)) return [];
+  return fields.map((f, i) => ({
+    id: f.id || `f${i}_${Date.now().toString(36)}`,
+    label: String(f.label || 'Untitled question'),
+    type: f.type || 'Short text',
+    options: Array.isArray(f.options) ? f.options.filter(Boolean) : undefined,
+    url: f.url || undefined,
+    required: f.required !== false,
+  }));
+}
+
 router.post('/:id/sections/:sid/tasks', auth('admin'), assertOwnsJourney, async (req, res) => {
-  const { title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger } = req.body;
+  const {
+    title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
+    step_type, fields, booking_url, payment_amount_cents, payment_currency, checkr_package,
+  } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
+  if (step_type && !STEP_TYPES.includes(step_type)) return res.status(400).json({ error: 'invalid step_type' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO tasks (section_id,title,description,tag,assignee,position,docuseal_template_id,docuseal_trigger)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [req.params.sid, title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment']
+      `INSERT INTO tasks (section_id,title,description,tag,assignee,position,docuseal_template_id,docuseal_trigger,
+                           step_type,fields,booking_url,payment_amount_cents,payment_currency,checkr_package)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [req.params.sid, title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
+       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null, payment_amount_cents||null, payment_currency||'usd', checkr_package||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.put('/:id/sections/:sid/tasks/:tid', auth('admin'), assertOwnsJourney, async (req, res) => {
-  const { title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger } = req.body;
+  const {
+    title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
+    step_type, fields, booking_url, payment_amount_cents, payment_currency, checkr_package,
+  } = req.body;
+  if (step_type && !STEP_TYPES.includes(step_type)) return res.status(400).json({ error: 'invalid step_type' });
   try {
     const { rows } = await pool.query(
-      `UPDATE tasks SET title=$1,description=$2,tag=$3,assignee=$4,position=$5,docuseal_template_id=$6,docuseal_trigger=$7 WHERE id=$8 AND section_id=$9 RETURNING *`,
-      [title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment', req.params.tid, req.params.sid]
+      `UPDATE tasks SET title=$1,description=$2,tag=$3,assignee=$4,position=$5,docuseal_template_id=$6,docuseal_trigger=$7,
+                         step_type=$8,fields=$9,booking_url=$10,payment_amount_cents=$11,payment_currency=$12,checkr_package=$13
+       WHERE id=$14 AND section_id=$15 RETURNING *`,
+      [title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
+       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null, payment_amount_cents||null, payment_currency||'usd', checkr_package||null,
+       req.params.tid, req.params.sid]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);

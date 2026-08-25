@@ -25,6 +25,103 @@ router.get('/', auth('admin'), async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// GET /clients/analytics/overview — real dashboard stats for the Overview page.
+// No fabricated numbers: everything below is derived from assigned_at /
+// completed_at / task_completions.completed_at timestamps already in the DB.
+router.get('/analytics/overview', auth(['owner', 'admin']), async (req, res) => {
+  try {
+    const bizId = req.user.business_id;
+
+    const countInProgress = async (asOf) => {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id
+         WHERE j.business_id=$1 AND cj.assigned_at <= $2
+           AND (cj.completed_at IS NULL OR cj.completed_at > $2)
+           AND (cj.archived_at IS NULL OR cj.archived_at > $2)`, [bizId, asOf]
+      );
+      return Number(rows[0].count);
+    };
+    const countCompletedSince = async (start, end) => {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id
+         WHERE j.business_id=$1 AND cj.completed_at >= $2 AND cj.completed_at < $3`, [bizId, start, end]
+      );
+      return Number(rows[0].count);
+    };
+    const countStalled = async (asOf) => {
+      const sevenBefore = new Date(asOf.getTime() - 7 * 86400000);
+      const { rows } = await pool.query(
+        `SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id
+         WHERE j.business_id=$1 AND cj.assigned_at <= $3 AND cj.assigned_at < $2
+           AND (cj.completed_at IS NULL OR cj.completed_at > $3)
+           AND (cj.archived_at IS NULL OR cj.archived_at > $3)
+           AND NOT EXISTS (
+             SELECT 1 FROM task_completions tc
+             JOIN tasks t ON t.id=tc.task_id JOIN sections s ON s.id=t.section_id
+             WHERE s.journey_id=cj.journey_id AND tc.client_id=cj.client_id
+               AND tc.completed_at >= $2 AND tc.completed_at <= $3
+           )`, [bizId, sevenBefore, asOf]
+      );
+      return Number(rows[0].count);
+    };
+
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const priorMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const priorMonthSamePoint = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+
+    const [inProgressNow, inProgressWeekAgo, completedThisMonth, completedPriorMonthToDate, stalledNow, stalledWeekAgo] = await Promise.all([
+      countInProgress(now), countInProgress(weekAgo),
+      countCompletedSince(monthStart, now), countCompletedSince(priorMonthStart, priorMonthSamePoint),
+      countStalled(now), countStalled(weekAgo),
+    ]);
+
+    const { rows: totalClients } = await pool.query(
+      `SELECT COUNT(*) FROM users WHERE business_id=$1 AND role='client'`, [bizId]
+    );
+    const totalCap = Math.max(1, Number(totalClients[0].count));
+
+    const stats = [
+      { label: 'In progress', value: String(inProgressNow), delta: fmtDelta(inProgressNow - inProgressWeekAgo), tone: inProgressNow >= inProgressWeekAgo ? '#177a66' : '#a8600d', pct: Math.min(100, Math.round((inProgressNow / totalCap) * 100)) },
+      { label: 'Completed this month', value: String(completedThisMonth), delta: fmtDelta(completedThisMonth - completedPriorMonthToDate), tone: completedThisMonth >= completedPriorMonthToDate ? '#177a66' : '#a8600d', pct: Math.min(100, Math.round((completedThisMonth / totalCap) * 100)) },
+      { label: 'Stalled 7+ days', value: String(stalledNow), delta: fmtDelta(stalledNow - stalledWeekAgo, true), tone: stalledNow <= stalledWeekAgo ? '#177a66' : '#a8600d', pct: Math.min(100, Math.round((stalledNow / totalCap) * 100)) },
+    ];
+
+    // 12-week starts/completions series, oldest to newest, each bucket = 7 days.
+    const chart = [];
+    for (let i = 11; i >= 0; i--) {
+      const bucketEnd = new Date(now.getTime() - i * 7 * 86400000);
+      const bucketStart = new Date(bucketEnd.getTime() - 7 * 86400000);
+      const [{ rows: startedRows }, { rows: doneRows }] = await Promise.all([
+        pool.query(`SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id WHERE j.business_id=$1 AND cj.assigned_at >= $2 AND cj.assigned_at < $3`, [bizId, bucketStart, bucketEnd]),
+        pool.query(`SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id WHERE j.business_id=$1 AND cj.completed_at >= $2 AND cj.completed_at < $3`, [bizId, bucketStart, bucketEnd]),
+      ]);
+      chart.push({ label: bucketEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), started: Number(startedRows[0].count), completed: Number(doneRows[0].count) });
+    }
+
+    // Stalled people list (for the "Onboarding health" widget / drill-down).
+    const { rows: stalledList } = await pool.query(
+      `SELECT u.id AS client_id, u.name, j.name AS journey_name, cj.assigned_at
+       FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id JOIN users u ON u.id=cj.client_id
+       WHERE j.business_id=$1 AND cj.completed_at IS NULL AND cj.archived_at IS NULL
+         AND cj.assigned_at < $2
+         AND NOT EXISTS (
+           SELECT 1 FROM task_completions tc JOIN tasks t ON t.id=tc.task_id JOIN sections s ON s.id=t.section_id
+           WHERE s.journey_id=cj.journey_id AND tc.client_id=cj.client_id AND tc.completed_at >= $2
+         )
+       ORDER BY cj.assigned_at ASC LIMIT 20`, [bizId, weekAgo]
+    );
+
+    res.json({ stats, chart, stalled: stalledList });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+function fmtDelta(n, invert) {
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  return `${sign}${Math.abs(n)}`;
+}
+
 router.post('/:clientId/assign', auth('admin'), async (req, res) => {
   const { journey_id } = req.body;
   if (!journey_id) return res.status(400).json({ error: 'journey_id required' });

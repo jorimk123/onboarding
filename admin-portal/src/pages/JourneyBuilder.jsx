@@ -3,6 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast } from '../main';
 
+export const STEP_TYPES = [
+  { id: 'Form', label: 'Form', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', blurb: 'Ask questions and collect answers.' },
+  { id: 'Upload', label: 'File upload', chip: 'rgba(130,225,225,.3)', dot: '#12706f', blurb: 'Ask them to attach a document or photo.' },
+  { id: 'Sign', label: 'E-signature', chip: 'rgba(255,168,200,.26)', dot: '#d1508a', blurb: 'Send a document out to be signed via DocuSeal.' },
+  { id: 'Check', label: 'Background check / Quiz', chip: 'rgba(255,196,120,.32)', dot: '#c07a1c', blurb: 'Run a Checkr background check, or a multiple-choice quiz.' },
+  { id: 'Learn', label: 'Training module', chip: 'rgba(107,79,213,.14)', dot: '#6b4fd5', blurb: 'Videos they watch before Next unlocks.' },
+  { id: 'Book', label: 'Schedule a call', chip: 'rgba(34,169,140,.16)', dot: '#177a66', blurb: 'Link out to a booking page (Calendly, Cal.com, etc).' },
+  { id: 'Pay', label: 'Payment', chip: 'rgba(30,40,80,.1)', dot: '#5a6485', blurb: 'Take a fee or deposit via Stripe.' },
+];
+
+export const FIELD_TYPES = ['Short text', 'Long text', 'Email', 'Phone', 'Date', 'Multiple choice', 'Yes / No', 'Checkbox', 'Dropdown', 'Upload', 'Video'];
+
+const stepMeta = id => STEP_TYPES.find(s => s.id === id) || STEP_TYPES[0];
+const uid = () => 'f' + Math.random().toString(36).slice(2, 9);
+
 export default function JourneyBuilderPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -37,15 +52,15 @@ export default function JourneyBuilderPage() {
   if (!journey) return null;
 
   return (
-    <div className="page">
+    <div className="page" style={{ paddingTop: 0 }}>
       <button className="btn btn-ghost btn-sm" onClick={() => nav('/journeys')} style={{ marginBottom: 12 }}>← Back</button>
       <div className="page-header" style={{ alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 600 }}>{journey.name}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{journey.name}</div>
           {journey.description && <div style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>{journey.description}</div>}
           <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
             <span className="badge badge-purple">{journey.sections.length} sections</span>
-            <span className="badge badge-gray">{journey.sections.reduce((a, s) => a + s.tasks.length, 0)} tasks</span>
+            <span className="badge badge-gray">{journey.sections.reduce((a, s) => a + s.tasks.length, 0)} steps</span>
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => setAddingSection(true)}>+ Add section</button>
@@ -57,41 +72,53 @@ export default function JourneyBuilderPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {journey.sections.map(section => (
             <div key={section.id} className="card" style={{ padding: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: section.tasks.length ? '1px solid var(--border)' : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: section.tasks.length ? '1px solid var(--hairline)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>{section.title}</span>
-                  <span className="badge badge-gray">{section.tasks.length} tasks</span>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{section.title}</span>
+                  <span className="badge badge-gray">{section.tasks.length} steps</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setTaskModal({ sectionId: section.id })}>+ Add task</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setTaskModal({ sectionId: section.id })}>+ Add step</button>
                   <button className="btn btn-danger btn-sm" onClick={() => delSection(section.id, section.title)}>Delete</button>
                 </div>
               </div>
-              {section.tasks.map((task, i) => (
-                <div key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 20px', borderBottom: i < section.tasks.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ width: 18, height: 18, borderRadius: 4, border: '1.5px solid var(--border-dark)', marginTop: 2, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{task.title}</div>
-                    {task.description && <div style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{task.description}</div>}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {task.tag && <span className="badge badge-purple">{task.tag}</span>}
-                      {task.assignee && <span style={{ fontSize: 12, color: 'var(--text2)' }}>👤 {task.assignee}</span>}
-                      {task.docuseal_template_id && (
-                        <span className="badge badge-teal" title={`DocuSeal template: ${task.docuseal_template_id}`}>
-                          📄 DocuSeal ({task.docuseal_trigger})
-                        </span>
-                      )}
+              {section.tasks.map((task, i) => {
+                const meta = stepMeta(task.step_type);
+                const isQuiz = task.step_type === 'Check' && (task.fields || []).some(f => f.type === 'Multiple choice');
+                return (
+                  <div key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 20px', borderBottom: i < section.tasks.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 8, background: meta.chip, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 3, background: meta.dot }} />
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text)' }}>{task.title}</div>
+                      {task.description && <div style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{task.description}</div>}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span className="badge badge-purple">{isQuiz ? 'Quiz' : meta.label}</span>
+                        {task.tag && <span className="badge badge-gray">{task.tag}</span>}
+                        {task.assignee && <span style={{ fontSize: 12, color: 'var(--text2)' }}>👤 {task.assignee}</span>}
+                        {task.step_type === 'Sign' && task.docuseal_template_id && (
+                          <span className="badge badge-teal" title={`DocuSeal template: ${task.docuseal_template_id}`}>📄 DocuSeal ({task.docuseal_trigger})</span>
+                        )}
+                        {task.step_type === 'Check' && !isQuiz && (
+                          <span className="badge badge-amber">🔍 {task.checkr_package || 'Checkr'}{!task.checkr_package ? '' : ''}</span>
+                        )}
+                        {isQuiz && <span className="badge badge-amber">{(task.fields || []).filter(f => f.type === 'Multiple choice').length} questions</span>}
+                        {task.step_type === 'Book' && task.booking_url && <span className="badge badge-teal">🗓️ Booking link set</span>}
+                        {task.step_type === 'Pay' && task.payment_amount_cents != null && <span className="badge badge-teal">💳 ${(task.payment_amount_cents / 100).toFixed(2)}</span>}
+                        {(task.fields || []).length > 0 && task.step_type !== 'Check' && <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>{task.fields.length} field{task.fields.length !== 1 ? 's' : ''}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setTaskModal({ sectionId: section.id, task })}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => delTask(section.id, task.id, task.title)}>✕</button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setTaskModal({ sectionId: section.id, task })}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => delTask(section.id, task.id, task.title)}>✕</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {section.tasks.length === 0 && (
                 <div style={{ padding: '14px 20px', color: 'var(--text3)', fontSize: 13, textAlign: 'center' }}>
-                  No tasks — <button className="btn btn-ghost btn-sm" style={{ display: 'inline' }} onClick={() => setTaskModal({ sectionId: section.id })}>add one</button>
+                  No steps — <button className="btn btn-ghost btn-sm" style={{ display: 'inline' }} onClick={() => setTaskModal({ sectionId: section.id })}>add one</button>
                 </div>
               )}
             </div>
@@ -117,62 +144,197 @@ export default function JourneyBuilderPage() {
   );
 }
 
+function emptyField(type = 'Short text') {
+  return { id: uid(), label: '', type, options: ['Option 1', 'Option 2'], url: '', required: true };
+}
+
+function FieldEditor({ fields, setFields, allowedTypes, addLabel }) {
+  const update = (i, patch) => setFields(fields.map((f, fi) => fi === i ? { ...f, ...patch } : f));
+  const remove = i => setFields(fields.filter((_, fi) => fi !== i));
+  const add = () => setFields([...fields, emptyField(allowedTypes[0])]);
+
+  return (
+    <div>
+      {fields.map((f, i) => (
+        <div key={f.id} style={{ border: '1px solid var(--hairline)', borderRadius: 14, padding: 12, marginBottom: 10, background: 'rgba(255,255,255,.5)' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input value={f.label} onChange={e => update(i, { label: e.target.value })} placeholder={`Question ${i + 1}`} style={{ flex: 1 }} />
+            <select value={f.type} onChange={e => update(i, { type: e.target.value })} style={{ width: 150 }}>
+              {allowedTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => remove(i)}>✕</button>
+          </div>
+          {(f.type === 'Multiple choice' || f.type === 'Dropdown') && (
+            <div>
+              <label style={{ fontSize: 11.5 }}>Options (one per line)</label>
+              <textarea rows={3} value={(f.options || []).join('\n')} onChange={e => update(i, { options: e.target.value.split('\n') })} placeholder={'Option A\nOption B'} />
+            </div>
+          )}
+          {f.type === 'Video' && (
+            <div>
+              <label style={{ fontSize: 11.5 }}>YouTube URL</label>
+              <input value={f.url || ''} onChange={e => update(i, { url: e.target.value })} placeholder="https://www.youtube.com/watch?v=…" />
+            </div>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontWeight: 400, fontSize: 12.5 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={f.required !== false} onChange={e => update(i, { required: e.target.checked })} /> Required
+          </label>
+        </div>
+      ))}
+      <button type="button" className="btn btn-secondary btn-sm" onClick={add}>{addLabel || '+ Add question'}</button>
+    </div>
+  );
+}
+
 function TaskModal({ journeyId, sectionId, task, onClose, onSave }) {
   const toast = useToast();
+  const [stepType, setStepType] = useState(task?.step_type || 'Form');
+  const isExistingQuiz = task?.step_type === 'Check' && (task?.fields || []).some(f => f.type === 'Multiple choice');
+  const [checkMode, setCheckMode] = useState(isExistingQuiz ? 'quiz' : 'bgcheck');
   const [form, setForm] = useState({
     title: task?.title || '', description: task?.description || '',
     tag: task?.tag || '', assignee: task?.assignee || '',
     docuseal_template_id: task?.docuseal_template_id || '',
     docuseal_trigger: task?.docuseal_trigger || 'assignment',
+    booking_url: task?.booking_url || '',
+    payment_amount: task?.payment_amount_cents != null ? (task.payment_amount_cents / 100).toFixed(2) : '',
+    payment_currency: task?.payment_currency || 'usd',
+    checkr_package: task?.checkr_package || 'basic_criminal',
   });
+  const [fields, setFields] = useState(task?.fields?.length ? task.fields : []);
   const [saving, setSaving] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const changeStepType = (id) => {
+    setStepType(id);
+    if (id === 'Upload' && fields.length === 0) setFields([emptyField('Upload')]);
+    if (id === 'Learn' && fields.length === 0) setFields([emptyField('Video')]);
+    if (id === 'Form' && fields.length === 0) setFields([emptyField('Short text')]);
+  };
 
   const submit = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
-      if (task) await api.updateTask(journeyId, sectionId, task.id, form);
-      else await api.createTask(journeyId, sectionId, form);
-      toast(task ? 'Task updated' : 'Task added'); onSave();
+      let outFields = fields;
+      if (stepType === 'Check') {
+        outFields = checkMode === 'quiz'
+          ? fields.filter(f => f.type === 'Multiple choice')
+          : [{ id: uid(), label: 'I consent to a background check', type: 'Checkbox', required: true }];
+      } else if (stepType === 'Sign' || stepType === 'Book' || stepType === 'Pay') {
+        outFields = [];
+      }
+
+      const payload = {
+        title: form.title, description: form.description, tag: form.tag || null, assignee: form.assignee || null,
+        step_type: stepType,
+        fields: outFields,
+        docuseal_template_id: stepType === 'Sign' ? (form.docuseal_template_id || null) : null,
+        docuseal_trigger: form.docuseal_trigger,
+        booking_url: stepType === 'Book' ? (form.booking_url || null) : null,
+        payment_amount_cents: stepType === 'Pay' && form.payment_amount ? Math.round(parseFloat(form.payment_amount) * 100) : null,
+        payment_currency: form.payment_currency,
+        checkr_package: stepType === 'Check' && checkMode === 'bgcheck' ? form.checkr_package : null,
+      };
+
+      if (task) await api.updateTask(journeyId, sectionId, task.id, payload);
+      else await api.createTask(journeyId, sectionId, payload);
+      toast(task ? 'Step updated' : 'Step added'); onSave();
     } catch (err) { toast(err.message, 'error'); } finally { setSaving(false); }
   };
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title">{task ? 'Edit task' : 'Add task'}</div>
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <div className="modal-title">{task ? 'Edit step' : 'Add step'}</div>
         <form onSubmit={submit}>
-          <div className="form-group"><label>Task name</label><input autoFocus value={form.title} onChange={set('title')} required placeholder="e.g. Sign NDA" /></div>
-          <div className="form-group"><label>Description</label><textarea value={form.description} onChange={set('description')} rows={3} /></div>
+          <div className="form-group">
+            <label>Step type</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {STEP_TYPES.map(s => (
+                <button type="button" key={s.id} onClick={() => changeStepType(s.id)}
+                  className={`tag-pill ${stepType === s.id ? 'selected' : ''}`} style={{ justifyContent: 'center' }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 6 }}>{stepMeta(stepType).blurb}</div>
+          </div>
+
+          <div className="form-group"><label>Step name</label><input autoFocus value={form.title} onChange={set('title')} required placeholder="e.g. Sign NDA" /></div>
+          <div className="form-group"><label>Description</label><textarea value={form.description} onChange={set('description')} rows={2} /></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="form-group"><label>Tag</label><input value={form.tag} onChange={set('tag')} placeholder="HR, IT…" /></div>
             <div className="form-group"><label>Assignee</label><input value={form.assignee} onChange={set('assignee')} placeholder="Sarah…" /></div>
           </div>
 
-          {/* DocuSeal section */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              📄 DocuSeal <span style={{ fontWeight: 400, color: 'var(--text2)' }}>(optional)</span>
-            </div>
-            <div className="form-group">
-              <label>DocuSeal Template ID</label>
-              <input value={form.docuseal_template_id} onChange={set('docuseal_template_id')} placeholder="e.g. 12345 — leave blank if not needed" />
-              <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>Found in DocuSeal → Templates → your template URL</div>
-            </div>
-            {form.docuseal_template_id && (
+          {stepType === 'Sign' && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📄 DocuSeal</div>
+              <div className="form-group">
+                <label>DocuSeal Template ID</label>
+                <input value={form.docuseal_template_id} onChange={set('docuseal_template_id')} placeholder="e.g. 12345" />
+              </div>
               <div className="form-group">
                 <label>When to send the document</label>
                 <select value={form.docuseal_trigger} onChange={set('docuseal_trigger')}>
                   <option value="assignment">On journey assignment (send immediately)</option>
-                  <option value="completion">When this task is checked off</option>
+                  <option value="completion">When this step is checked off</option>
                 </select>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {stepType === 'Book' && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
+              <div className="form-group">
+                <label>Booking link</label>
+                <input value={form.booking_url} onChange={set('booking_url')} placeholder="https://calendly.com/your-team/intro" />
+                <div style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 4 }}>We link out to your existing Calendly/Cal.com page — no calendar API needed. The client confirms themselves once booked.</div>
+              </div>
+            </div>
+          )}
+
+          {stepType === 'Pay' && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group"><label>Amount (USD)</label><input type="number" step="0.01" min="0" value={form.payment_amount} onChange={set('payment_amount')} placeholder="25.00" /></div>
+                <div className="form-group"><label>Currency</label><input value={form.payment_currency} onChange={set('payment_currency')} placeholder="usd" /></div>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text2)' }}>Charged via a real Stripe Checkout session. Requires STRIPE_SECRET_KEY to be set — otherwise the client sees a clear "not configured" message.</div>
+            </div>
+          )}
+
+          {stepType === 'Check' && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button type="button" className={`tag-pill ${checkMode === 'bgcheck' ? 'selected' : ''}`} onClick={() => setCheckMode('bgcheck')}>Background check</button>
+                <button type="button" className={`tag-pill ${checkMode === 'quiz' ? 'selected' : ''}`} onClick={() => setCheckMode('quiz')}>Quiz</button>
+              </div>
+              {checkMode === 'bgcheck' ? (
+                <div className="form-group">
+                  <label>Checkr package</label>
+                  <input value={form.checkr_package} onChange={set('checkr_package')} placeholder="basic_criminal" />
+                  <div style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 4 }}>Runs via Checkr once the client checks the consent box. Requires CHECKR_API_KEY to be set.</div>
+                </div>
+              ) : (
+                <FieldEditor fields={fields.filter(f => f.type === 'Multiple choice').length ? fields : [emptyField('Multiple choice')]}
+                  setFields={fs => setFields(fs)} allowedTypes={['Multiple choice']} addLabel="+ Add question" />
+              )}
+            </div>
+          )}
+
+          {(stepType === 'Form' || stepType === 'Upload' || stepType === 'Learn') && (
+            <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Fields</div>
+              <FieldEditor fields={fields} setFields={setFields}
+                allowedTypes={stepType === 'Upload' ? ['Upload'] : stepType === 'Learn' ? ['Video', 'Yes / No', 'Checkbox'] : FIELD_TYPES.filter(t => t !== 'Upload')}
+                addLabel={stepType === 'Upload' ? '+ Add file to request' : stepType === 'Learn' ? '+ Add video' : '+ Add question'} />
+            </div>
+          )}
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save task'}</button>
+            <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save step'}</button>
           </div>
         </form>
       </div>

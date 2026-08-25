@@ -309,69 +309,98 @@ function JourneysPage() {
   );
 }
 
+function TrendChart({ data }) {
+  const w = 100, h = 100, pad = 4;
+  const max = Math.max(1, ...data.map(d => Math.max(d.started, d.completed)));
+  const pt = (v, i) => [pad + (i / (data.length - 1 || 1)) * (w - pad * 2), h - pad - (v / max) * (h - pad * 2)];
+  const path = arr => arr.map((d, i) => pt(d, i)).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: 140 }}>
+      <path d={path(data.map(d => d.started))} fill="none" stroke="url(#gStarted)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      <path d={path(data.map(d => d.completed))} fill="none" stroke="#22a98c" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      <defs>
+        <linearGradient id="gStarted" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#a79dff" /><stop offset="100%" stopColor="#5b4fd6" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 function OverviewPage() {
-  const [clients, setClients] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [journeys, setJourneys] = useState([]);
+  const [clientCount, setClientCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const nav = useNavigate();
 
   useEffect(() => {
-    Promise.all([api.getClients(), api.getJourneys()]).then(([c, j]) => { setClients(c); setJourneys(j); }).finally(() => setLoading(false));
+    Promise.all([api.getAnalyticsOverview(), api.getJourneys(), api.getClients()])
+      .then(([a, j, c]) => { setAnalytics(a); setJourneys(j); setClientCount(c.length); })
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Layout crumb="Dashboard" title="Overview"><div className="spinner" /></Layout>;
+  if (loading || !analytics) return <Layout crumb="Dashboard" title="Overview"><div className="spinner" /></Layout>;
 
-  const rows = clients.flatMap(c => (c.journeys || []).map(j => ({ client: c, journey: j })));
-  const inProgress = rows.filter(r => !r.journey.completed_at);
-  const completed = rows.filter(r => r.journey.completed_at);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-
   const initials = name => (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const pctOf = j => j.task_count > 0 ? Math.round((j.completed_count / j.task_count) * 100) : 0;
+  const { stats, chart, stalled } = analytics;
 
   return (
     <Layout crumb="Dashboard" title={`${greeting}, ${(user?.business?.name || '').split(' ')[0] || ''}`}>
       <div className="page" style={{ paddingTop: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>In progress</div>
-            <div style={{ fontSize: 30, fontWeight: 800, marginTop: 6, color: 'var(--text)' }}>{inProgress.length}</div>
-          </div>
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>Completed</div>
-            <div style={{ fontSize: 30, fontWeight: 800, marginTop: 6, color: 'var(--teal-text)' }}>{completed.length}</div>
-          </div>
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>People &amp; journeys</div>
-            <div style={{ fontSize: 30, fontWeight: 800, marginTop: 6, color: 'var(--text)' }}>{clients.length} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text3)' }}>/ {journeys.length}</span></div>
-          </div>
+          {stats.map(s => (
+            <div key={s.label} className="card">
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)' }}>{s.label}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+                <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)' }}>{s.value}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: s.tone }}>{s.delta}</div>
+              </div>
+              <div style={{ marginTop: 12, height: 5, borderRadius: 5, background: 'rgba(30,40,80,.09)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${s.pct}%`, borderRadius: 5, background: 'linear-gradient(90deg,#a79dff,#5b4fd6)' }} />
+              </div>
+            </div>
+          ))}
         </div>
+
+        <section className="card">
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)' }}>Starts and completions</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>Last 12 weeks, all journeys</div>
+            </div>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: 'linear-gradient(180deg,#a79dff,#5b4fd6)' }} /><span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text2)' }}>Started</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: '#22a98c' }} /><span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text2)' }}>Completed</span></div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8 }}><TrendChart data={chart} /></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+            <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{chart[0]?.label}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{chart[chart.length - 1]?.label}</span>
+          </div>
+        </section>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 20, alignItems: 'start' }}>
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)' }}>Not completed</div>
-              <span className="badge badge-purple">{inProgress.length}</span>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)' }}>Stalled 7+ days</div>
+              <span className="badge badge-amber">{stalled.length}</span>
             </div>
-            {inProgress.length === 0 ? <div style={{ padding: '20px 0', color: 'var(--text3)', fontSize: 13 }}>Nobody in progress right now.</div> : inProgress.slice(0, 8).map(({ client, journey: j }, i) => {
-              const pct = pctOf(j);
-              return (
-                <div key={client.id + j.journey_id} onClick={() => nav('/clients')} style={{ display: 'grid', gridTemplateColumns: '34px 1fr 1.1fr 70px', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: i ? '1px solid var(--hairline)' : 'none', cursor: 'pointer' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--purple-light)', color: 'var(--purple-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 700 }}>{initials(client.name)}</div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-strong)' }}>{client.name}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.journey_name}</div>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}><span style={{ fontWeight: 600, color: 'var(--text2)' }}>{j.completed_count}/{j.task_count} tasks</span><span style={{ fontWeight: 800 }}>{pct}%</span></div>
-                    <div className="progress-bar" style={{ marginTop: 5 }}><div className="progress-fill" style={{ width: pct + '%' }} /></div>
-                  </div>
-                  <span className="badge badge-amber" style={{ justifySelf: 'start' }}>Active</span>
+            {stalled.length === 0 ? <div style={{ padding: '20px 0', color: 'var(--text3)', fontSize: 13 }}>Nobody's stalled right now.</div> : stalled.slice(0, 8).map((s, i) => (
+              <div key={s.client_id} onClick={() => nav('/clients')} style={{ display: 'grid', gridTemplateColumns: '34px 1fr auto', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: i ? '1px solid var(--hairline)' : 'none', cursor: 'pointer' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--purple-light)', color: 'var(--purple-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 700 }}>{initials(s.name)}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-strong)' }}>{s.name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.journey_name}</div>
                 </div>
-              );
-            })}
+                <span className="badge badge-amber" style={{ justifySelf: 'end' }}>No activity 7+ days</span>
+              </div>
+            ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -388,16 +417,9 @@ function OverviewPage() {
               </div>
             </div>
             <div className="card">
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>Completed</div>
-              {completed.length === 0 ? <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Nobody has finished a journey yet.</div> : completed.slice(0, 5).map(({ client, journey: j }, i) => (
-                <div key={client.id + j.journey_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 2px', borderTop: i ? '1px solid var(--hairline)' : 'none' }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--teal-light)', color: 'var(--teal-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700 }}>{initials(client.name)}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{j.journey_name}</div>
-                  </div>
-                </div>
-              ))}
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>People &amp; journeys</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text)' }}>{clientCount} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text3)' }}>/ {journeys.length}</span></div>
+              <button className="btn btn-secondary btn-sm" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }} onClick={() => nav('/clients')}>View People →</button>
             </div>
           </div>
         </div>
