@@ -21,4 +21,5 @@ export const api = {
   completeTask: (taskId) => req('POST', `/progress/tasks/${taskId}/complete`),
   uncompleteTask: (taskId) => req('DELETE', `/progress/tasks/${taskId}/complete`),
   saveField: (taskId, fieldId, value) => req('POST', `/progress/tasks/${taskId}/fields/${fieldId}`, { value }),
+  skipTask: (taskId) => req('POST', `/progress/tasks/${taskId}/skip`),
 };

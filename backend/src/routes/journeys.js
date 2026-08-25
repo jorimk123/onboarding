@@ -140,20 +140,25 @@ function normalizeFields(fields) {
   }));
 }
 
+const REMINDER_CADENCES = ['off', '3days', 'weekly'];
+
 router.post('/:id/sections/:sid/tasks', auth('admin'), assertOwnsJourney, async (req, res) => {
   const {
     title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
     step_type, fields, booking_url,
+    required_to_continue, allow_skip, notify_reviewer, auto_advance, reminder_cadence,
   } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
   if (step_type && !STEP_TYPES.includes(step_type)) return res.status(400).json({ error: 'invalid step_type' });
+  if (reminder_cadence && !REMINDER_CADENCES.includes(reminder_cadence)) return res.status(400).json({ error: 'invalid reminder_cadence' });
   try {
     const { rows } = await pool.query(
       `INSERT INTO tasks (section_id,title,description,tag,assignee,position,docuseal_template_id,docuseal_trigger,
-                           step_type,fields,booking_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                           step_type,fields,booking_url,required_to_continue,allow_skip,notify_reviewer,auto_advance,reminder_cadence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [req.params.sid, title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
-       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null]
+       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null,
+       required_to_continue !== false, !!allow_skip, !!notify_reviewer, auto_advance !== false, reminder_cadence || 'off']
     );
     res.status(201).json(rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
@@ -163,15 +168,19 @@ router.put('/:id/sections/:sid/tasks/:tid', auth('admin'), assertOwnsJourney, as
   const {
     title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
     step_type, fields, booking_url,
+    required_to_continue, allow_skip, notify_reviewer, auto_advance, reminder_cadence,
   } = req.body;
   if (step_type && !STEP_TYPES.includes(step_type)) return res.status(400).json({ error: 'invalid step_type' });
+  if (reminder_cadence && !REMINDER_CADENCES.includes(reminder_cadence)) return res.status(400).json({ error: 'invalid reminder_cadence' });
   try {
     const { rows } = await pool.query(
       `UPDATE tasks SET title=$1,description=$2,tag=$3,assignee=$4,position=$5,docuseal_template_id=$6,docuseal_trigger=$7,
-                         step_type=$8,fields=$9,booking_url=$10
-       WHERE id=$11 AND section_id=$12 RETURNING *`,
+                         step_type=$8,fields=$9,booking_url=$10,required_to_continue=$11,allow_skip=$12,notify_reviewer=$13,
+                         auto_advance=$14,reminder_cadence=$15
+       WHERE id=$16 AND section_id=$17 RETURNING *`,
       [title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
        step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null,
+       required_to_continue !== false, !!allow_skip, !!notify_reviewer, auto_advance !== false, reminder_cadence || 'off',
        req.params.tid, req.params.sid]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });

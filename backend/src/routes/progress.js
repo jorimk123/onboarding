@@ -2,7 +2,7 @@ const router = require('express').Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const { dispatch } = require('../webhooks/dispatcher');
-const { sendCompletionEmail } = require('../services/email');
+const { sendCompletionEmail, sendReviewerNotification } = require('../services/email');
 const { sendDocument } = require('../services/docuseal');
 
 // Load a task + assert the caller (a client) is assigned to its journey.
@@ -79,6 +79,16 @@ router.post('/tasks/:taskId/complete', auth(), async (req, res) => {
       sendDocument({ client, task, journeyId: task.journey_id }).catch(console.error);
     }
 
+    // Notify a staff reviewer if this step is flagged for it.
+    if (task.notify_reviewer) {
+      const { rows: reviewers } = await pool.query(
+        `SELECT email FROM users WHERE business_id=$1 AND role IN ('owner','admin')`, [task.business_id]
+      );
+      reviewers.forEach(r => sendReviewerNotification({
+        to: r.email, clientName: client.name, taskTitle: task.title, journeyName: journey.name,
+      }).catch(console.error));
+    }
+
     // Check if the entire section is now complete
     const { rows: secTasks } = await pool.query(
       `SELECT t.id FROM tasks t WHERE t.section_id=$1`, [task.section_id]
@@ -116,6 +126,25 @@ router.post('/tasks/:taskId/complete', auth(), async (req, res) => {
     }
 
     res.json({ completed: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /progress/tasks/:taskId/skip — only allowed when the step's admin has
+// turned on "Allow skip for now". Marks the step done-but-skipped so progress
+// still moves forward; doesn't fire the same completion side effects
+// (webhooks/emails) since nothing was actually submitted.
+router.post('/tasks/:taskId/skip', auth(), async (req, res) => {
+  try {
+    const task = await loadOwnedTask(req, req.params.taskId);
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (!task.allow_skip) return res.status(400).json({ error: 'This step cannot be skipped' });
+
+    await pool.query(
+      `INSERT INTO task_completions (client_id,task_id,skipped) VALUES ($1,$2,true)
+       ON CONFLICT (client_id,task_id) DO UPDATE SET skipped=true`,
+      [req.user.id, task.id]
+    );
+    res.json({ completed: true, skipped: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

@@ -63,4 +63,13 @@ async function sendWeeklyDigestEmail({ to, businessName, inProgressCount, comple
   });
 }
 
-module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail, sendWeeklyDigestEmail };
+async function sendReviewerNotification({ to, clientName, taskTitle, journeyName }) {
+  if (!process.env.RESEND_API_KEY) { console.log(`[email] (dev) reviewer notification for ${to} skipped — RESEND_API_KEY not set`); return; }
+  await resend.emails.send({
+    from: FROM, to,
+    subject: `${clientName} completed "${taskTitle}"`,
+    html: `<p><strong>${clientName}</strong> just completed <strong>${taskTitle}</strong> in <strong>${journeyName}</strong> and flagged it for review.</p>`,
+  });
+}
+
+module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail, sendWeeklyDigestEmail, sendReviewerNotification };

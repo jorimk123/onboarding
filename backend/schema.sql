@@ -121,6 +121,14 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_amount_cents INT;        -- s
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_currency TEXT DEFAULT 'usd';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checkr_package TEXT;             -- step_type='Check', non-quiz
 
+-- Per-step behavior settings (Journey Builder "Edit step" panel).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS required_to_continue BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS allow_skip BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notify_reviewer BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS auto_advance BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reminder_cadence TEXT NOT NULL DEFAULT 'off'
+  CHECK (reminder_cadence IN ('off','3days','weekly'));
+
 -- ── Client Journey Assignments ────────────────────────────────
 CREATE TABLE IF NOT EXISTS client_journeys (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -142,6 +150,7 @@ CREATE TABLE IF NOT EXISTS task_completions (
   completed_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(client_id, task_id)
 );
+ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS skipped BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- ── Task Field Responses ───────────────────────────────────────
 -- Per-field answers a client gives on a Form/Quiz/Learn step. task_completions

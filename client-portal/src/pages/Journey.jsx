@@ -182,7 +182,17 @@ function QuizRunner({ task, answers, onAnswer, onFinish }) {
 }
 
 // ── one task's expandable body ──────────────────────────────────
-function TaskBody({ task, onSaveField, onComplete, onUncomplete, toast }) {
+function SkipLink({ task, onSkip, toast }) {
+  if (!task.allow_skip || task.completed) return null;
+  return (
+    <button type="button" onClick={async () => { try { await onSkip(task.id); toast('Step skipped for now'); } catch (err) { toast(err.message, 'error'); } }}
+      style={{ marginLeft: 10, background: 'none', border: 'none', color: 'var(--text3)', fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline' }}>
+      Skip for now
+    </button>
+  );
+}
+
+function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }) {
   const [answers, setAnswers] = useState(task.responses || {});
   const [busy, setBusy] = useState(false);
 
@@ -217,6 +227,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, toast }) {
         {!task.completed && (
           <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onComplete(task.id)}>I've scheduled it</button>
         )}
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
     );
   }
@@ -231,6 +242,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, toast }) {
         {!task.completed
           ? <button className="btn btn-primary btn-sm" onClick={() => onComplete(task.id)}>Mark as signed ✓</button>
           : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Signed</div>}
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
     );
   }
@@ -251,6 +263,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, toast }) {
         {task.completed
           ? <button className="btn btn-secondary btn-sm" onClick={() => onUncomplete(task.id)}>Mark as not done</button>
           : <button className="btn btn-primary btn-sm" disabled={!allRequiredFilled} onClick={() => onComplete(task.id)}>Mark complete ✓</button>}
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
     </div>
   );
@@ -279,6 +292,7 @@ export default function JourneyPage() {
     try { await api.uncompleteTask(taskId); load(); } catch (err) { toast(err.message, 'error'); }
   };
   const saveField = (taskId, fieldId, value) => api.saveField(taskId, fieldId, value);
+  const skip = async (taskId) => { await api.skipTask(taskId); load(); };
 
   if (loading) return <div className="spinner" />;
   if (!journey) return null;
@@ -366,7 +380,7 @@ export default function JourneyPage() {
                       </div>
                       {isOpen && (
                         <div style={{ padding: '4px 20px 20px 54px' }} onClick={e => e.stopPropagation()}>
-                          <TaskBody task={task} onSaveField={saveField} onComplete={complete} onUncomplete={uncomplete} toast={toast} />
+                          <TaskBody task={task} onSaveField={saveField} onComplete={complete} onUncomplete={uncomplete} onSkip={skip} toast={toast} />
                         </div>
                       )}
                     </div>
