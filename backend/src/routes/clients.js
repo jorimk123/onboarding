@@ -160,6 +160,12 @@ router.get('/:clientId/journeys/:journeyId', auth('admin'), async (req, res) => 
     );
     const responsesByTask = {};
     for (const r of responses) (responsesByTask[r.task_id] ||= {})[r.field_id] = r.value;
+    const { rows: bgChecks } = await pool.query(
+      `SELECT bc.* FROM background_checks bc
+       JOIN tasks t ON t.id=bc.task_id JOIN sections s ON t.section_id=s.id
+       WHERE s.journey_id=$1 AND bc.client_id=$2`, [journeyId, clientId]
+    );
+    const bgByTask = Object.fromEntries(bgChecks.map(b => [b.task_id, b]));
 
     journey.sections = sections.map(s => ({
       ...s,
@@ -168,10 +174,37 @@ router.get('/:clientId/journeys/:journeyId', auth('admin'), async (req, res) => 
         completed: Object.prototype.hasOwnProperty.call(completedByTask, t.id),
         completed_at: completedByTask[t.id] || null,
         responses: responsesByTask[t.id] || {},
+        background_check: bgByTask[t.id] || null,
       })),
     }));
 
     res.json({ client: cRows[0], journey, assigned_at: cjRows[0].assigned_at, completed_at: cjRows[0].completed_at });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /clients/:clientId/tasks/:taskId/mark-cleared — admin manually marks
+// a BGCheck step's background check as reviewed + cleared, which also
+// completes the step for the client. Background checks are never
+// auto-cleared — a human always makes this call.
+router.post('/:clientId/tasks/:taskId/mark-cleared', auth('admin'), async (req, res) => {
+  try {
+    const { clientId, taskId } = req.params;
+    const { rows: taskRows } = await pool.query(
+      `SELECT t.*, s.journey_id, j.business_id FROM tasks t
+       JOIN sections s ON t.section_id=s.id JOIN journeys j ON s.journey_id=j.id
+       WHERE t.id=$1 AND j.business_id=$2`, [taskId, req.user.business_id]
+    );
+    if (!taskRows.length) return res.status(404).json({ error: 'Task not found' });
+    const task = taskRows[0];
+    if (task.step_type !== 'BGCheck') return res.status(400).json({ error: 'Not a background check step' });
+
+    await pool.query(
+      `UPDATE background_checks SET status='clear' WHERE client_id=$1 AND task_id=$2`, [clientId, taskId]
+    );
+    await pool.query(
+      `INSERT INTO task_completions (client_id,task_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [clientId, taskId]
+    );
+    res.json({ cleared: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

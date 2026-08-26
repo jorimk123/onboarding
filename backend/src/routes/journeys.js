@@ -45,6 +45,7 @@ router.get('/:id', auth(), async (req, res) => {
       `SELECT t.* FROM tasks t JOIN sections s ON t.section_id=s.id WHERE s.journey_id=$1 ORDER BY t.position`, [journey.id]);
     let completedTaskIds = [];
     let responsesByTask = {};
+    let bgChecksByTask = {};
     if (req.user.role === 'client') {
       const { rows: c } = await pool.query('SELECT task_id FROM task_completions WHERE client_id=$1', [req.user.id]);
       completedTaskIds = c.map(x => x.task_id);
@@ -56,10 +57,17 @@ router.get('/:id', auth(), async (req, res) => {
       for (const row of r) {
         (responsesByTask[row.task_id] ||= {})[row.field_id] = row.value;
       }
+      const { rows: bg } = await pool.query(
+        `SELECT bc.* FROM background_checks bc
+         JOIN tasks t ON t.id=bc.task_id JOIN sections s2 ON t.section_id=s2.id
+         WHERE bc.client_id=$1 AND s2.journey_id=$2`, [req.user.id, journey.id]
+      );
+      for (const row of bg) bgChecksByTask[row.task_id] = row;
     }
     journey.sections = sections.map(s => ({
       ...s, tasks: tasks.filter(t => t.section_id === s.id).map(t => ({
-        ...t, completed: completedTaskIds.includes(t.id), responses: responsesByTask[t.id] || {}
+        ...t, completed: completedTaskIds.includes(t.id), responses: responsesByTask[t.id] || {},
+        background_check: bgChecksByTask[t.id] || null,
       }))
     }));
     res.json(journey);
@@ -133,7 +141,7 @@ router.delete('/:id/sections/:sid', auth('admin'), assertOwnsJourney, async (req
 // ── Tasks ───────────────────────────────────────────────────────
 // step_type: Form | Upload | Sign | Check | Learn | Book
 // fields: [{ id, label, type, options?: string[], url?: string, required?: bool }]
-const STEP_TYPES = ['Form', 'Upload', 'Sign', 'Check', 'Learn', 'Book'];
+const STEP_TYPES = ['Form', 'Upload', 'Sign', 'Check', 'Learn', 'Book', 'BGCheck'];
 
 function normalizeFields(fields) {
   if (!Array.isArray(fields)) return [];
@@ -152,7 +160,7 @@ const REMINDER_CADENCES = ['off', '3days', 'weekly'];
 router.post('/:id/sections/:sid/tasks', auth('admin'), assertOwnsJourney, async (req, res) => {
   const {
     title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
-    step_type, fields, booking_url,
+    step_type, fields, booking_url, ministrysafe_level, ministrysafe_package_code,
     required_to_continue, allow_skip, notify_reviewer, auto_advance, reminder_cadence,
   } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
@@ -161,10 +169,11 @@ router.post('/:id/sections/:sid/tasks', auth('admin'), assertOwnsJourney, async 
   try {
     const { rows } = await pool.query(
       `INSERT INTO tasks (section_id,title,description,tag,assignee,position,docuseal_template_id,docuseal_trigger,
-                           step_type,fields,booking_url,required_to_continue,allow_skip,notify_reviewer,auto_advance,reminder_cadence)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+                           step_type,fields,booking_url,ministrysafe_level,ministrysafe_package_code,
+                           required_to_continue,allow_skip,notify_reviewer,auto_advance,reminder_cadence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [req.params.sid, title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
-       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null,
+       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null, ministrysafe_level||null, ministrysafe_package_code||null,
        required_to_continue !== false, !!allow_skip, !!notify_reviewer, auto_advance !== false, reminder_cadence || 'off']
     );
     res.status(201).json(rows[0]);
@@ -174,7 +183,7 @@ router.post('/:id/sections/:sid/tasks', auth('admin'), assertOwnsJourney, async 
 router.put('/:id/sections/:sid/tasks/:tid', auth('admin'), assertOwnsJourney, async (req, res) => {
   const {
     title, description, tag, assignee, position, docuseal_template_id, docuseal_trigger,
-    step_type, fields, booking_url,
+    step_type, fields, booking_url, ministrysafe_level, ministrysafe_package_code,
     required_to_continue, allow_skip, notify_reviewer, auto_advance, reminder_cadence,
   } = req.body;
   if (step_type && !STEP_TYPES.includes(step_type)) return res.status(400).json({ error: 'invalid step_type' });
@@ -182,11 +191,12 @@ router.put('/:id/sections/:sid/tasks/:tid', auth('admin'), assertOwnsJourney, as
   try {
     const { rows } = await pool.query(
       `UPDATE tasks SET title=$1,description=$2,tag=$3,assignee=$4,position=$5,docuseal_template_id=$6,docuseal_trigger=$7,
-                         step_type=$8,fields=$9,booking_url=$10,required_to_continue=$11,allow_skip=$12,notify_reviewer=$13,
-                         auto_advance=$14,reminder_cadence=$15
-       WHERE id=$16 AND section_id=$17 RETURNING *`,
+                         step_type=$8,fields=$9,booking_url=$10,ministrysafe_level=$11,ministrysafe_package_code=$12,
+                         required_to_continue=$13,allow_skip=$14,notify_reviewer=$15,
+                         auto_advance=$16,reminder_cadence=$17
+       WHERE id=$18 AND section_id=$19 RETURNING *`,
       [title, description||null, tag||null, assignee||null, position??0, docuseal_template_id||null, docuseal_trigger||'assignment',
-       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null,
+       step_type || 'Form', JSON.stringify(normalizeFields(fields)), booking_url||null, ministrysafe_level||null, ministrysafe_package_code||null,
        required_to_continue !== false, !!allow_skip, !!notify_reviewer, auto_advance !== false, reminder_cadence || 'off',
        req.params.tid, req.params.sid]
     );

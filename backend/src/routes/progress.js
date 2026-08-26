@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const { dispatch } = require('../webhooks/dispatcher');
 const { sendCompletionEmail, sendReviewerNotification } = require('../services/email');
 const { sendDocument } = require('../services/docuseal');
+const { startBackgroundCheck } = require('../services/ministrysafe');
 
 // Load a task + assert the caller (a client) is assigned to its journey.
 async function loadOwnedTask(req, taskId) {
@@ -37,6 +38,28 @@ router.post('/tasks/:taskId/fields/:fieldId', auth(), async (req, res) => {
 
     res.json({ saved: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /progress/tasks/:taskId/start-background-check — client kicks off a
+// MinistrySafe QuickApp order for a BGCheck step. MinistrySafe collects all
+// sensitive PII (SSN/DOB/address) themselves via applicant_interface_url —
+// we never see or store it. Does NOT complete the task; an admin reviews
+// the results and marks it cleared from the Person page.
+router.post('/tasks/:taskId/start-background-check', auth(), async (req, res) => {
+  try {
+    const task = await loadOwnedTask(req, req.params.taskId);
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (task.step_type !== 'BGCheck') return res.status(400).json({ error: 'This step is not a background check' });
+
+    const { rows: existing } = await pool.query(
+      'SELECT * FROM background_checks WHERE client_id=$1 AND task_id=$2', [req.user.id, task.id]
+    );
+    if (existing.length) return res.json(existing[0]);
+
+    const { rows: clientRows } = await pool.query('SELECT id,email,name FROM users WHERE id=$1', [req.user.id]);
+    const bc = await startBackgroundCheck({ client: clientRows[0], task });
+    res.status(201).json(bc);
+  } catch (err) { console.error(err); res.status(500).json({ error: err.message || 'Server error' }); }
 });
 
 router.post('/tasks/:taskId/complete', auth(), async (req, res) => {

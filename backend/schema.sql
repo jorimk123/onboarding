@@ -125,6 +125,15 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_amount_cents INT;        -- s
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_currency TEXT DEFAULT 'usd';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checkr_package TEXT;             -- step_type='Check', non-quiz
 
+-- BGCheck step type (MinistrySafe background checks). Re-run-safe: drop
+-- and recreate the CHECK constraint so this migration can apply cleanly
+-- whether or not it's already been run.
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_step_type_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_step_type_check
+  CHECK (step_type IN ('Form','Upload','Sign','Check','Learn','Book','Pay','BGCheck'));
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_level INT;                    -- step_type='BGCheck', 1-7
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_package_code TEXT;            -- alternative to level
+
 -- Per-step behavior settings (Journey Builder "Edit step" panel).
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS required_to_continue BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS allow_skip BOOLEAN NOT NULL DEFAULT FALSE;
@@ -171,7 +180,9 @@ CREATE TABLE IF NOT EXISTS task_responses (
   UNIQUE(client_id, task_id, field_id)
 );
 
--- ── Background Checks (Checkr) ──────────────────────────────────
+-- ── Background Checks (MinistrySafe) ─────────────────────────────
+-- Legacy Checkr columns are kept (unused) rather than dropped, so this
+-- table's history stays intact; MinistrySafe uses the columns below.
 CREATE TABLE IF NOT EXISTS background_checks (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   client_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -182,6 +193,14 @@ CREATE TABLE IF NOT EXISTS background_checks (
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   completed_at        TIMESTAMPTZ
 );
+ALTER TABLE background_checks DROP CONSTRAINT IF EXISTS background_checks_status_check;
+ALTER TABLE background_checks ADD CONSTRAINT background_checks_status_check
+  CHECK (status IN ('pending','submitted','clear','consider','suspended','failed'));
+ALTER TABLE background_checks ADD COLUMN IF NOT EXISTS ministrysafe_user_id TEXT;
+ALTER TABLE background_checks ADD COLUMN IF NOT EXISTS ministrysafe_check_id TEXT;
+ALTER TABLE background_checks ADD COLUMN IF NOT EXISTS applicant_interface_url TEXT;
+ALTER TABLE background_checks ADD COLUMN IF NOT EXISTS results_url TEXT;
+CREATE INDEX IF NOT EXISTS idx_bc_task_client ON background_checks(task_id, client_id);
 
 -- ── Payments (Stripe) ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS payments (

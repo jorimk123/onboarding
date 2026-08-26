@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { handleInboundWebhook } = require('./services/docuseal');
+const { handleInboundWebhook: handleMinistrySafeWebhook } = require('./services/ministrysafe');
 const { startScheduler } = require('./services/scheduler');
 
 const app = express();
@@ -28,6 +29,9 @@ app.post('/docuseal/webhook', express.raw({ type: '*/*' }), (req, res, next) => 
   try { req.body = JSON.parse(req.body); } catch { req.body = {}; }
   next();
 }, handleInboundWebhook);
+
+// MinistrySafe webhook — plain JSON, no signature verification per their docs.
+app.post('/ministrysafe/webhook', express.json(), handleMinistrySafeWebhook);
 
 app.use(express.json());
 
