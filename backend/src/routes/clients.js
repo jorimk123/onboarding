@@ -122,6 +122,59 @@ function fmtDelta(n, invert) {
   return `${sign}${Math.abs(n)}`;
 }
 
+// GET /clients/:clientId/journeys/:journeyId — full step-by-step breakdown
+// of one client's progress through one journey, for the admin Person page.
+router.get('/:clientId/journeys/:journeyId', auth('admin'), async (req, res) => {
+  try {
+    const { clientId, journeyId } = req.params;
+    const { rows: cRows } = await pool.query(
+      'SELECT id, name, email, company FROM users WHERE id=$1 AND role=$2 AND business_id=$3',
+      [clientId, 'client', req.user.business_id]
+    );
+    if (!cRows.length) return res.status(404).json({ error: 'Client not found' });
+
+    const { rows: jRows } = await pool.query(
+      'SELECT j.* FROM journeys j WHERE j.id=$1 AND j.business_id=$2', [journeyId, req.user.business_id]
+    );
+    if (!jRows.length) return res.status(404).json({ error: 'Journey not found' });
+    const journey = jRows[0];
+
+    const { rows: cjRows } = await pool.query(
+      'SELECT * FROM client_journeys WHERE client_id=$1 AND journey_id=$2', [clientId, journeyId]
+    );
+    if (!cjRows.length) return res.status(404).json({ error: 'Journey not assigned to this client' });
+
+    const { rows: sections } = await pool.query('SELECT * FROM sections WHERE journey_id=$1 ORDER BY position', [journeyId]);
+    const { rows: tasks } = await pool.query(
+      `SELECT t.* FROM tasks t JOIN sections s ON t.section_id=s.id WHERE s.journey_id=$1 ORDER BY t.position`, [journeyId]);
+    const { rows: completions } = await pool.query(
+      `SELECT tc.task_id, tc.completed_at FROM task_completions tc
+       JOIN tasks t ON t.id=tc.task_id JOIN sections s ON t.section_id=s.id
+       WHERE s.journey_id=$1 AND tc.client_id=$2`, [journeyId, clientId]
+    );
+    const completedByTask = Object.fromEntries(completions.map(c => [c.task_id, c.completed_at]));
+    const { rows: responses } = await pool.query(
+      `SELECT tr.task_id, tr.field_id, tr.value FROM task_responses tr
+       JOIN tasks t ON t.id=tr.task_id JOIN sections s ON t.section_id=s.id
+       WHERE s.journey_id=$1 AND tr.client_id=$2`, [journeyId, clientId]
+    );
+    const responsesByTask = {};
+    for (const r of responses) (responsesByTask[r.task_id] ||= {})[r.field_id] = r.value;
+
+    journey.sections = sections.map(s => ({
+      ...s,
+      tasks: tasks.filter(t => t.section_id === s.id).map(t => ({
+        ...t,
+        completed: Object.prototype.hasOwnProperty.call(completedByTask, t.id),
+        completed_at: completedByTask[t.id] || null,
+        responses: responsesByTask[t.id] || {},
+      })),
+    }));
+
+    res.json({ client: cRows[0], journey, assigned_at: cjRows[0].assigned_at, completed_at: cjRows[0].completed_at });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 router.post('/:clientId/assign', auth('admin'), async (req, res) => {
   const { journey_id } = req.body;
   if (!journey_id) return res.status(400).json({ error: 'journey_id required' });

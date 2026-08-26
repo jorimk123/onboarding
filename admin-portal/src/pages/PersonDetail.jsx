@@ -3,6 +3,86 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast } from '../main';
 
+// One step row inside an expanded journey: status dot, title, type badge,
+// and (if answered) the client's submitted responses.
+function StepRow({ task, index }) {
+  const [open, setOpen] = useState(false);
+  const responseEntries = Object.entries(task.responses || {});
+  const hasBody = responseEntries.length > 0 || task.step_type === 'Sign' || task.step_type === 'Book';
+  return (
+    <div style={{ borderRadius: 14, background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.85)', overflow: 'hidden' }}>
+      <div onClick={() => hasBody && setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: hasBody ? 'pointer' : 'default' }}>
+        <span style={{
+          width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: task.completed ? 11 : 10.5, fontWeight: 800,
+          background: task.completed ? 'var(--teal)' : 'rgba(30,40,80,.1)',
+          color: task.completed ? '#fff' : 'var(--text3)',
+        }}>{task.completed ? '✓' : index + 1}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</div>
+        </div>
+        {task.step_type && <span className="badge badge-gray" style={{ fontSize: 10, padding: '3px 8px' }}>{task.step_type}</span>}
+        <span className={`badge ${task.completed ? 'badge-teal' : 'badge-gray'}`} style={{ fontSize: 10, padding: '3px 8px' }}>
+          {task.completed ? 'Done' : 'Pending'}
+        </span>
+        {hasBody && <span style={{ fontSize: 11, color: 'var(--text3)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>⌄</span>}
+      </div>
+      {open && (
+        <div style={{ padding: '2px 12px 12px 44px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {responseEntries.length > 0 ? responseEntries.map(([fid, val]) => {
+            const field = (task.fields || []).find(f => f.id === fid);
+            return (
+              <div key={fid}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{field?.label || fid}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 2 }}>{String(val ?? '') || '—'}</div>
+              </div>
+            );
+          }) : (
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              {task.step_type === 'Sign' ? (task.completed ? 'Document signed.' : 'Not signed yet.') :
+               task.step_type === 'Book' ? (task.completed ? 'Call booked.' : 'Not booked yet.') : 'No answers submitted yet.'}
+            </div>
+          )}
+          {task.completed_at && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>Completed {new Date(task.completed_at).toLocaleString()}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Expanded body of a journey row on the Person page: loads the real
+// section/task/response breakdown for this specific client + journey.
+function JourneyDetail({ clientId, journeyId }) {
+  const [detail, setDetail] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    api.getClientJourney(clientId, journeyId)
+      .then(d => { if (!cancelled) setDetail(d); })
+      .catch(e => { if (!cancelled) setErr(e.message); });
+    return () => { cancelled = true; };
+  }, [clientId, journeyId]);
+
+  if (err) return <div style={{ padding: '12px 0', fontSize: 12, color: 'var(--red)' }}>{err}</div>;
+  if (!detail) return <div style={{ padding: '16px 0' }}><div className="spinner" style={{ margin: '16px auto' }} /></div>;
+
+  const allTasks = detail.journey.sections.flatMap(s => s.tasks);
+  return (
+    <div style={{ padding: '10px 0 4px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {detail.journey.sections.map(s => (
+        <div key={s.id}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>{s.title}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {s.tasks.map(t => <StepRow key={t.id} task={t} index={allTasks.findIndex(x => x.id === t.id)} />)}
+            {s.tasks.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)' }}>No steps in this section.</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PersonDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -12,6 +92,7 @@ export default function PersonDetailPage() {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [journeyId, setJourneyId] = useState('');
+  const [expandedJourneyId, setExpandedJourneyId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -94,19 +175,23 @@ export default function PersonDetailPage() {
               <div style={{ padding: '16px 0', color: 'var(--text3)', fontSize: 13 }}>No journey assigned yet.</div>
             ) : cj.map((j, i) => {
               const pct = j.task_count > 0 ? Math.round((j.completed_count / j.task_count) * 100) : 0;
+              const expanded = expandedJourneyId === j.journey_id;
               return (
                 <div key={j.journey_id} style={{ padding: '14px 0', borderTop: i ? '1px solid var(--hairline)' : 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}
+                    onClick={() => setExpandedJourneyId(expanded ? null : j.journey_id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{j.journey_name}</span>
                       <span className={`badge ${j.completed_at ? 'badge-teal' : 'badge-amber'}`}>{j.completed_at ? 'Complete' : 'In progress'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 12, color: 'var(--text3)' }}>{j.completed_count}/{j.task_count}</span>
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => unassign(j.journey_id, j.journey_name)}>Remove</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={(e) => { e.stopPropagation(); unassign(j.journey_id, j.journey_name); }}>Remove</button>
+                      <span style={{ fontSize: 11, color: 'var(--text3)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>⌄</span>
                     </div>
                   </div>
                   <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%' }} /></div>
+                  {expanded && <JourneyDetail clientId={id} journeyId={j.journey_id} />}
                 </div>
               );
             })}

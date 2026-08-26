@@ -39,6 +39,7 @@ export const api = {
   updateTask: (jid, sid, tid, b) => req('PUT', `/journeys/${jid}/sections/${sid}/tasks/${tid}`, b),
   deleteTask: (jid, sid, tid) => req('DELETE', `/journeys/${jid}/sections/${sid}/tasks/${tid}`),
   getClients: () => req('GET', '/clients'),
+  getClientJourney: (clientId, journeyId) => req('GET', `/clients/${clientId}/journeys/${journeyId}`),
   getAnalyticsOverview: () => req('GET', '/clients/analytics/overview'),
   assignJourney: (cid, jid) => req('POST', `/clients/${cid}/assign`, { journey_id: jid }),
   unassignJourney: (cid, jid) => req('DELETE', `/clients/${cid}/assign/${jid}`),

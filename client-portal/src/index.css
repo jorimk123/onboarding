@@ -25,11 +25,12 @@ body::before{
 }
 #root{position:relative;z-index:1}
 a{color:inherit;text-decoration:none} button{font-family:var(--font);cursor:pointer;font-size:14px}
-input,textarea{
+input:not([type="checkbox"]):not([type="radio"]),textarea{
   font-family:var(--font);font-size:14px;width:100%;padding:10px 14px;border:1.5px solid var(--border-dark);border-radius:var(--r);
   background:rgba(255,255,255,.55);backdrop-filter:var(--blur-sm);-webkit-backdrop-filter:var(--blur-sm);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s,background .15s;
 }
 input:focus,textarea:focus{border-color:var(--purple-mid);background:rgba(255,255,255,.8);box-shadow:0 0 0 4px rgba(91,79,214,.14)}
+input[type="checkbox"],input[type="radio"]{width:16px;height:16px;flex:none;accent-color:var(--teal)}
 label{font-size:13px;font-weight:600;display:block;margin-bottom:5px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 22px;border-radius:14px;font-weight:700;border:1px solid transparent;transition:opacity .15s,background .15s,transform .1s;font-size:14px}
 .btn:active{transform:scale(.97)}
