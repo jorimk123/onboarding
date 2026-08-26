@@ -175,6 +175,81 @@ router.get('/:clientId/journeys/:journeyId', auth('admin'), async (req, res) => 
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// GET /clients/:clientId/profile — aggregated contact info + files across
+// every journey the client has ever been assigned, for the "Everything on
+// file" card on the admin Person page. Contact fields (phone/city/state/
+// church) aren't dedicated DB columns — they're pulled from whatever intake
+// form fields the client actually filled in, matched by label keyword.
+router.get('/:clientId/profile', auth('admin'), async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { rows: cRows } = await pool.query(
+      'SELECT id, name, email, company FROM users WHERE id=$1 AND role=$2 AND business_id=$3',
+      [clientId, 'client', req.user.business_id]
+    );
+    if (!cRows.length) return res.status(404).json({ error: 'Client not found' });
+
+    const { rows: tasks } = await pool.query(
+      `SELECT t.id, t.title, t.step_type, t.fields, j.name AS journey_name
+       FROM tasks t JOIN sections s ON t.section_id=s.id JOIN journeys j ON s.journey_id=j.id
+       JOIN client_journeys cj ON cj.journey_id=j.id AND cj.client_id=$1
+       WHERE j.business_id=$2`, [clientId, req.user.business_id]
+    );
+    const { rows: completions } = await pool.query(
+      `SELECT tc.task_id, tc.completed_at FROM task_completions tc
+       JOIN tasks t ON t.id=tc.task_id JOIN sections s ON t.section_id=s.id JOIN journeys j ON s.journey_id=j.id
+       JOIN client_journeys cj ON cj.journey_id=j.id AND cj.client_id=$1
+       WHERE tc.client_id=$1 AND j.business_id=$2`, [clientId, req.user.business_id]
+    );
+    const { rows: responses } = await pool.query(
+      `SELECT tr.task_id, tr.field_id, tr.value FROM task_responses tr
+       JOIN tasks t ON t.id=tr.task_id JOIN sections s ON t.section_id=s.id JOIN journeys j ON s.journey_id=j.id
+       JOIN client_journeys cj ON cj.journey_id=j.id AND cj.client_id=$1
+       WHERE tr.client_id=$1 AND j.business_id=$2`, [clientId, req.user.business_id]
+    );
+    const completedByTask = Object.fromEntries(completions.map(c => [c.task_id, c.completed_at]));
+    const responsesByTask = {};
+    for (const r of responses) (responsesByTask[r.task_id] ||= {})[r.field_id] = r.value;
+
+    // Match intake-form fields to the profile attributes we want to surface,
+    // by keyword in the field label — first match wins.
+    const KEYWORDS = { phone: 'phone', city: 'city', state: 'state', church: 'church' };
+    const contact = { phone: null, city: null, state: null, church: null };
+    const uploads = [];
+    const signed = [];
+
+    for (const task of tasks) {
+      const fields = task.fields || [];
+      const taskResponses = responsesByTask[task.id] || {};
+
+      for (const field of fields) {
+        const value = taskResponses[field.id];
+        if (value === undefined || value === null || value === '') continue;
+        const label = (field.label || '').toLowerCase();
+
+        if (field.type === 'Upload' && value?.name) {
+          uploads.push({
+            journey_name: task.journey_name, task_title: task.title,
+            field_label: field.label, name: value.name, size: value.size || null,
+            data_url: value.dataUrl || null, completed_at: completedByTask[task.id] || null,
+          });
+          continue;
+        }
+
+        for (const [key, kw] of Object.entries(KEYWORDS)) {
+          if (!contact[key] && label.includes(kw) && typeof value === 'string') contact[key] = value;
+        }
+      }
+
+      if (task.step_type === 'Sign' && completedByTask[task.id]) {
+        signed.push({ journey_name: task.journey_name, task_title: task.title, completed_at: completedByTask[task.id] });
+      }
+    }
+
+    res.json({ client: cRows[0], contact, uploads, signed });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
 router.post('/:clientId/assign', auth('admin'), async (req, res) => {
   const { journey_id } = req.body;
   if (!journey_id) return res.status(400).json({ error: 'journey_id required' });
