@@ -91,14 +91,14 @@ export default function ClientsPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <span style={{ fontWeight: 500, fontSize: 13 }}>{j.journey_name}</span>
-                            <span className={`badge ${j.completed_at ? 'badge-green' : 'badge-amber'}`}>{j.completed_at ? 'Complete' : 'In progress'}</span>
+                            <span className={`badge ${j.completed_at ? 'badge-teal' : 'badge-amber'}`}>{j.completed_at ? 'Complete' : 'In progress'}</span>
                           </div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <span style={{ fontSize: 12, color: 'var(--text2)' }}>{j.completed_count}/{j.task_count}</span>
                             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', fontSize: 12 }} onClick={() => unassign(client.id, j.journey_id, j.journey_name)}>Remove</button>
                           </div>
                         </div>
-                        <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%' }} /></div>
+                        <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%', background: j.completed_at ? 'linear-gradient(90deg,var(--teal-mid),var(--teal))' : undefined }} /></div>
                       </div>
                     );
                   })}
