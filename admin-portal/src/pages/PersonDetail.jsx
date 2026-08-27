@@ -5,10 +5,21 @@ import { useToast } from '../main';
 
 // One step row inside an expanded journey: status dot, title, type badge,
 // and (if answered) the client's submitted responses.
-function StepRow({ task, index }) {
+const BGCHECK_LABEL = { pending: 'Sent to applicant — not yet submitted', submitted: 'Submitted — awaiting your review', clear: 'Cleared ✓', consider: 'Flagged for review', suspended: 'Suspended', failed: 'Failed' };
+
+function StepRow({ task, index, clientId, onCleared, toast }) {
   const [open, setOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const responseEntries = Object.entries(task.responses || {});
-  const hasBody = responseEntries.length > 0 || task.step_type === 'Sign' || task.step_type === 'Book';
+  const hasBody = responseEntries.length > 0 || task.step_type === 'Sign' || task.step_type === 'Book' || task.step_type === 'BGCheck';
+
+  const markCleared = async () => {
+    setClearing(true);
+    try { await api.markBackgroundCheckCleared(clientId, task.id); toast('Marked cleared ✓'); onCleared(); }
+    catch (err) { toast(err.message, 'error'); }
+    finally { setClearing(false); }
+  };
+
   return (
     <div style={{ borderRadius: 14, background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.85)', overflow: 'hidden' }}>
       <div onClick={() => hasBody && setOpen(o => !o)}
@@ -38,7 +49,21 @@ function StepRow({ task, index }) {
                 <div style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 2 }}>{String(val ?? '') || '—'}</div>
               </div>
             );
-          }) : (
+          }) : task.step_type === 'BGCheck' ? (
+            <div>
+              <div style={{ fontSize: 12.5, color: 'var(--text)' }}>
+                {task.background_check ? (BGCHECK_LABEL[task.background_check.status] || task.background_check.status) : 'Not started — client hasn’t begun the background check yet.'}
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                {task.background_check?.results_url && (
+                  <a href={task.background_check.results_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">View results ↗</a>
+                )}
+                {task.background_check?.status === 'submitted' && !task.completed && (
+                  <button className="btn btn-primary btn-sm" disabled={clearing} onClick={markCleared}>{clearing ? 'Marking…' : 'Mark cleared ✓'}</button>
+                )}
+              </div>
+            </div>
+          ) : (
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               {task.step_type === 'Sign' ? (task.completed ? 'Document signed.' : 'Not signed yet.') :
                task.step_type === 'Book' ? (task.completed ? 'Call booked.' : 'Not booked yet.') : 'No answers submitted yet.'}
@@ -53,16 +78,15 @@ function StepRow({ task, index }) {
 
 // Expanded body of a journey row on the Person page: loads the real
 // section/task/response breakdown for this specific client + journey.
-function JourneyDetail({ clientId, journeyId }) {
+function JourneyDetail({ clientId, journeyId, toast }) {
   const [detail, setDetail] = useState(null);
   const [err, setErr] = useState('');
-  useEffect(() => {
-    let cancelled = false;
+  const load = () => {
     api.getClientJourney(clientId, journeyId)
-      .then(d => { if (!cancelled) setDetail(d); })
-      .catch(e => { if (!cancelled) setErr(e.message); });
-    return () => { cancelled = true; };
-  }, [clientId, journeyId]);
+      .then(d => setDetail(d))
+      .catch(e => setErr(e.message));
+  };
+  useEffect(() => { load(); }, [clientId, journeyId]);
 
   if (err) return <div style={{ padding: '12px 0', fontSize: 12, color: 'var(--red)' }}>{err}</div>;
   if (!detail) return <div style={{ padding: '16px 0' }}><div className="spinner" style={{ margin: '16px auto' }} /></div>;
@@ -74,7 +98,7 @@ function JourneyDetail({ clientId, journeyId }) {
         <div key={s.id}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>{s.title}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {s.tasks.map(t => <StepRow key={t.id} task={t} index={allTasks.findIndex(x => x.id === t.id)} />)}
+            {s.tasks.map(t => <StepRow key={t.id} task={t} index={allTasks.findIndex(x => x.id === t.id)} clientId={clientId} onCleared={load} toast={toast} />)}
             {s.tasks.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)' }}>No steps in this section.</div>}
           </div>
         </div>
@@ -89,6 +113,7 @@ export default function PersonDetailPage() {
   const toast = useToast();
   const [client, setClient] = useState(null);
   const [journeys, setJourneys] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [journeyId, setJourneyId] = useState('');
@@ -96,10 +121,11 @@ export default function PersonDetailPage() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getClients(), api.getJourneys()])
-      .then(([clients, js]) => {
+    Promise.all([api.getClients(), api.getJourneys(), api.getClientProfile(id).catch(() => null)])
+      .then(([clients, js, prof]) => {
         setClient(clients.find(c => String(c.id) === String(id)) || null);
         setJourneys(js);
+        setProfile(prof);
       })
       .finally(() => setLoading(false));
   };
@@ -149,7 +175,7 @@ export default function PersonDetailPage() {
             </div>
             {totalTasks > 0 && (
               <div style={{ marginTop: 16, height: 8, background: 'rgba(30,40,80,.09)', borderRadius: 8, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: overallPct + '%', background: 'linear-gradient(90deg,var(--purple-pale),var(--purple))', borderRadius: 8 }} />
+                <div style={{ height: '100%', width: overallPct + '%', background: overallPct >= 100 ? 'linear-gradient(90deg,var(--teal-mid),var(--teal))' : 'linear-gradient(90deg,var(--purple-pale),var(--purple))', borderRadius: 8 }} />
               </div>
             )}
           </div>
@@ -190,8 +216,8 @@ export default function PersonDetailPage() {
                       <span style={{ fontSize: 11, color: 'var(--text3)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>⌄</span>
                     </div>
                   </div>
-                  <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%' }} /></div>
-                  {expanded && <JourneyDetail clientId={id} journeyId={j.journey_id} />}
+                  <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%', background: j.completed_at ? 'linear-gradient(90deg,var(--teal-mid),var(--teal))' : undefined }} /></div>
+                  {expanded && <JourneyDetail clientId={id} journeyId={j.journey_id} toast={toast} />}
                 </div>
               );
             })}
@@ -200,10 +226,43 @@ export default function PersonDetailPage() {
 
         <div className="card">
           <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)', marginBottom: 14 }}>Everything on file</div>
-          {[['Name', client.name], ['Email', client.email], ['Company', client.company || '—']].map(([k, v], i) => (
+          {[
+            ['Full name', client.name],
+            ['Email', client.email],
+            ['Phone', profile?.contact?.phone || '—'],
+            ['City', profile?.contact?.city || '—'],
+            ['State', profile?.contact?.state || '—'],
+            ['Church attended', profile?.contact?.church || '—'],
+          ].map(([k, v], i) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '10px 0', borderTop: i ? '1px solid var(--hairline)' : 'none' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)' }}>{k}</span>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', textAlign: 'right' }}>{v}</span>
+            </div>
+          ))}
+
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 8 }}>Uploaded documents</div>
+          {(profile?.uploads || []).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No documents uploaded yet.</div>
+          ) : profile.uploads.map((u, i) => (
+            <a key={i} href={u.data_url || undefined} download={u.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: i ? '1px solid var(--hairline)' : 'none', textDecoration: 'none', color: 'inherit' }}>
+              <span style={{ fontSize: 14 }}>📎</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{u.journey_name} · {u.task_title}</div>
+              </div>
+            </a>
+          ))}
+
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 8 }}>Signed / completed documents</div>
+          {(profile?.signed || []).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Nothing signed yet.</div>
+          ) : profile.signed.map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: i ? '1px solid var(--hairline)' : 'none' }}>
+              <span style={{ fontSize: 14 }}>✍️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.task_title}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.journey_name} · signed {new Date(s.completed_at).toLocaleDateString()}</div>
+              </div>
             </div>
           ))}
         </div>

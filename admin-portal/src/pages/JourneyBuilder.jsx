@@ -10,6 +10,17 @@ export const STEP_TYPES = [
   { id: 'Check', label: 'Quiz', chip: 'rgba(255,196,120,.32)', dot: '#c07a1c', blurb: 'A multiple-choice quiz they answer one question at a time.' },
   { id: 'Learn', label: 'Training module', chip: 'rgba(107,79,213,.14)', dot: '#6b4fd5', blurb: 'Videos they watch before Next unlocks.' },
   { id: 'Book', label: 'Schedule a call', chip: 'rgba(34,169,140,.16)', dot: '#177a66', blurb: 'Link out to a booking page (Calendly, Cal.com, etc).' },
+  { id: 'BGCheck', label: 'Background check', chip: 'rgba(255,196,120,.32)', dot: '#a8600d', blurb: 'Order a MinistrySafe background check.' },
+];
+
+export const MINISTRYSAFE_LEVELS = [
+  { level: 1, label: 'Level 1 — SSN trace + national criminal database' },
+  { level: 2, label: 'Level 2 — Level 1 + county criminal search' },
+  { level: 3, label: 'Level 3 — Level 2 + sex offender registry' },
+  { level: 4, label: 'Level 4 — Level 3 + national criminal database (enhanced)' },
+  { level: 5, label: 'Level 5 — Comprehensive (Level 4 + federal criminal search)' },
+  { level: 6, label: 'Level 6 — Comprehensive + motor vehicle record' },
+  { level: 7, label: 'Level 7 — Comprehensive + credit check' },
 ];
 
 export const FIELD_TYPES = ['Short text', 'Long text', 'Email', 'Phone', 'Date', 'Multiple choice', 'Yes / No', 'Checkbox', 'Dropdown', 'Upload', 'Video'];
@@ -31,6 +42,7 @@ function stepSummary(task) {
   if (isQuiz) return `${(task.fields || []).filter(f => f.type === 'Multiple choice').length} questions`;
   if (task.step_type === 'Sign') return task.docuseal_template_id ? 'DocuSeal' : 'DocuSeal · not set up';
   if (task.step_type === 'Book') return task.booking_url ? 'Booking link set' : 'No booking link yet';
+  if (task.step_type === 'BGCheck') return task.ministrysafe_package_code ? `MinistrySafe · ${task.ministrysafe_package_code}` : `MinistrySafe · Level ${task.ministrysafe_level || 1}`;
   if ((task.fields || []).length) return `${task.fields.length} field${task.fields.length !== 1 ? 's' : ''}`;
   return task.step_type;
 }
@@ -43,7 +55,7 @@ function stepSubtitle(task) {
 // Type-specific badge color, matching each step type's palette accent.
 function badgeClassForType(stepType) {
   if (stepType === 'Sign') return 'flat-badge-pink';
-  if (stepType === 'Check') return 'flat-badge-amber';
+  if (stepType === 'Check' || stepType === 'BGCheck') return 'flat-badge-amber';
   if (stepType === 'Upload' || stepType === 'Book') return 'flat-badge-teal';
   return 'flat-badge-purple';
 }
@@ -93,6 +105,8 @@ export default function JourneyBuilderPage() {
         docuseal_template_id: selectedTask.docuseal_template_id || '',
         docuseal_trigger: selectedTask.docuseal_trigger || 'assignment',
         booking_url: selectedTask.booking_url || '',
+        ministrysafe_level: selectedTask.ministrysafe_level || 1,
+        ministrysafe_package_code: selectedTask.ministrysafe_package_code || '',
         required_to_continue: selectedTask.required_to_continue !== false,
         allow_skip: !!selectedTask.allow_skip,
         notify_reviewer: !!selectedTask.notify_reviewer,
@@ -206,7 +220,7 @@ export default function JourneyBuilderPage() {
     try {
       let outFields = draft.fields;
       if (draft.step_type === 'Check') outFields = draft.fields.filter(f => f.type === 'Multiple choice');
-      else if (draft.step_type === 'Sign' || draft.step_type === 'Book') outFields = [];
+      else if (draft.step_type === 'Sign' || draft.step_type === 'Book' || draft.step_type === 'BGCheck') outFields = [];
 
       await api.updateTask(id, selectedTask.sectionId, selectedTask.id, {
         title: draft.title, description: draft.description, tag: draft.tag || null, assignee: draft.assignee || null,
@@ -214,6 +228,8 @@ export default function JourneyBuilderPage() {
         docuseal_template_id: draft.step_type === 'Sign' ? (draft.docuseal_template_id || null) : null,
         docuseal_trigger: draft.docuseal_trigger,
         booking_url: draft.step_type === 'Book' ? (draft.booking_url || null) : null,
+        ministrysafe_level: draft.step_type === 'BGCheck' && !draft.ministrysafe_package_code ? (draft.ministrysafe_level || 1) : null,
+        ministrysafe_package_code: draft.step_type === 'BGCheck' ? (draft.ministrysafe_package_code || null) : null,
         required_to_continue: draft.required_to_continue, allow_skip: draft.allow_skip,
         notify_reviewer: draft.notify_reviewer, auto_advance: draft.auto_advance,
         reminder_cadence: draft.reminder_cadence,
@@ -493,6 +509,19 @@ function StepFieldsEditor({ draft, patch, dirty, saving, onPublish }) {
         <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginBottom: 4 }}>
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Booking link</div>
           <input value={draft.booking_url} onChange={e => patch({ booking_url: e.target.value })} placeholder="https://calendly.com/…" style={{ fontSize: 12.5 }} />
+        </div>
+      )}
+
+      {draft.step_type === 'BGCheck' && (
+        <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>MinistrySafe</div>
+          <select value={draft.ministrysafe_level} onChange={e => patch({ ministrysafe_level: Number(e.target.value) })} style={{ fontSize: 12.5, marginBottom: 8 }}>
+            {MINISTRYSAFE_LEVELS.map(l => <option key={l.level} value={l.level}>{l.label}</option>)}
+          </select>
+          <input value={draft.ministrysafe_package_code} onChange={e => patch({ ministrysafe_package_code: e.target.value })} placeholder="Or a custom package code (overrides level)" style={{ fontSize: 12.5 }} />
+          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 8 }}>
+            The client submits their info directly to MinistrySafe — no sensitive details (SSN, DOB, etc.) ever pass through this app. You'll review results and mark the step cleared from their Person page.
+          </div>
         </div>
       )}
 

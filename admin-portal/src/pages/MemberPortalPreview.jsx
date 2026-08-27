@@ -27,17 +27,23 @@ function FieldPreview({ f }) {
   const [choice, setChoice] = useState('');
   const inputStyle = { fontSize: 12.5 };
 
+  // Text-style fields carry their question as placeholder text inside the
+  // box itself; everything else still needs a label above since there's
+  // nowhere else to show the question.
+  const TEXT_TYPES = ['Short text', 'Long text', 'Email', 'Phone'];
+  const showLabel = !TEXT_TYPES.includes(f.type);
+
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 5 }}>{f.label || 'Untitled question'}</div>
-      {f.type === 'Short text' && <input value={val} onChange={e => setVal(e.target.value)} placeholder="Type an answer…" style={inputStyle} />}
-      {f.type === 'Long text' && <textarea value={val} onChange={e => setVal(e.target.value)} rows={2} placeholder="Type an answer…" style={inputStyle} />}
-      {f.type === 'Email' && <input type="email" value={val} onChange={e => setVal(e.target.value)} placeholder="name@email.com" style={inputStyle} />}
-      {f.type === 'Phone' && <input type="tel" value={val} onChange={e => setVal(e.target.value)} placeholder="(555) 555-5555" style={inputStyle} />}
+      {showLabel && <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 5 }}>{f.label || 'Untitled question'}</div>}
+      {f.type === 'Short text' && <input value={val} onChange={e => setVal(e.target.value)} placeholder={f.label || 'Type an answer…'} style={inputStyle} />}
+      {f.type === 'Long text' && <textarea value={val} onChange={e => setVal(e.target.value)} rows={2} placeholder={f.label || 'Type an answer…'} style={inputStyle} />}
+      {f.type === 'Email' && <input type="email" value={val} onChange={e => setVal(e.target.value)} placeholder={f.label || 'name@email.com'} style={inputStyle} />}
+      {f.type === 'Phone' && <input type="tel" value={val} onChange={e => setVal(e.target.value)} placeholder={f.label || '(555) 555-5555'} style={inputStyle} />}
       {f.type === 'Date' && <input type="date" value={val} onChange={e => setVal(e.target.value)} style={inputStyle} />}
       {f.type === 'Dropdown' && (
         <select value={val} onChange={e => setVal(e.target.value)} style={inputStyle}>
-          <option value="">Choose…</option>
+          <option value="">{f.label || 'Choose…'}</option>
           {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       )}
@@ -95,6 +101,17 @@ function StepPreviewBody({ task }) {
         {task.booking_url
           ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Open booking page →</a>
           : <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)' }}>No booking link added yet — add one in the Journey Builder.</div>}
+      </div>
+    );
+  }
+  if (task.step_type === 'BGCheck') {
+    return (
+      <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,.75)', border: '1px solid rgba(255,255,255,.9)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 6 }}>MinistrySafe background check</div>
+        <div style={{ fontSize: 12, color: 'rgba(30,40,80,.6)', marginBottom: 8 }}>
+          {task.ministrysafe_package_code ? `Package: ${task.ministrysafe_package_code}` : `Level ${task.ministrysafe_level || 1}`} — the client fills out all sensitive info directly with MinistrySafe.
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm">Start background check</button>
       </div>
     );
   }

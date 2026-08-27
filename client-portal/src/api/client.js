@@ -22,4 +22,5 @@ export const api = {
   uncompleteTask: (taskId) => req('DELETE', `/progress/tasks/${taskId}/complete`),
   saveField: (taskId, fieldId, value) => req('POST', `/progress/tasks/${taskId}/fields/${fieldId}`, { value }),
   skipTask: (taskId) => req('POST', `/progress/tasks/${taskId}/skip`),
+  startBackgroundCheck: (taskId) => req('POST', `/progress/tasks/${taskId}/start-background-check`),
 };

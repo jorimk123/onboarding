@@ -91,17 +91,17 @@ function FieldInput({ field, value, onChange, disabled }) {
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 14, fontFamily: 'inherit', background: disabled ? '#f7f8fa' : 'white' };
   switch (field.type) {
     case 'Long text':
-      return <textarea rows={3} disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} />;
+      return <textarea rows={3} disabled={disabled} placeholder={field.label} value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} />;
     case 'Email':
-      return <input type="email" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+      return <input type="email" disabled={disabled} placeholder={field.label} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
     case 'Phone':
-      return <input type="tel" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+      return <input type="tel" disabled={disabled} placeholder={field.label} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
     case 'Date':
       return <input type="date" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
     case 'Dropdown':
       return (
         <select disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle}>
-          <option value="">Select…</option>
+          <option value="">{field.label || 'Select…'}</option>
           {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       );
@@ -155,7 +155,7 @@ function FieldInput({ field, value, onChange, disabled }) {
     case 'Video':
       return <YouTubeField url={field.url} watched={!!value?.watched} onWatched={() => onChange({ watched: true })} />;
     default: // Short text
-      return <input type="text" disabled={disabled} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
+      return <input type="text" disabled={disabled} placeholder={field.label} value={value || ''} onChange={e => onChange(e.target.value)} style={inputStyle} />;
   }
 }
 
@@ -195,6 +195,7 @@ function SkipLink({ task, onSkip, toast }) {
 function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }) {
   const [answers, setAnswers] = useState(task.responses || {});
   const [busy, setBusy] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const save = async (fieldId, value) => {
     setAnswers(a => ({ ...a, [fieldId]: value }));
@@ -232,6 +233,37 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
     );
   }
 
+  if (task.step_type === 'BGCheck') {
+    const bc = task.background_check;
+    const start = async () => {
+      setStarting(true);
+      try {
+        const res = await api.startBackgroundCheck(task.id);
+        toast('Background check started');
+        if (res?.applicant_interface_url) window.open(res.applicant_interface_url, '_blank', 'noopener');
+      } catch (err) { toast(err.message, 'error'); }
+      finally { setStarting(false); }
+    };
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
+        <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 12 }}>
+          🛡️ You’ll fill out your background check details directly with MinistrySafe — we never see or store your SSN, date of birth, or address.
+        </div>
+        {task.completed ? (
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Cleared</div>
+        ) : !bc ? (
+          <button className="btn btn-primary btn-sm" disabled={starting} onClick={start}>{starting ? 'Starting…' : 'Start background check →'}</button>
+        ) : bc.status === 'pending' ? (
+          <a href={bc.applicant_interface_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex' }}>Continue background check →</a>
+        ) : (
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>Submitted — your team will review it shortly.</div>
+        )}
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
+      </div>
+    );
+  }
+
   if (task.step_type === 'Sign') {
     return (
       <div>
@@ -252,12 +284,20 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
     <div>
       {task.description && <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 14 }}>{task.description}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {(task.fields || []).map(f => (
-          <div key={f.id}>
-            {f.type !== 'Checkbox' && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{f.label}{f.required !== false && <span style={{ color: '#c0392b' }}> *</span>}</label>}
-            <FieldInput field={f} value={answers[f.id]} disabled={task.completed} onChange={v => save(f.id, v)} />
-          </div>
-        ))}
+        {(task.fields || []).map(f => {
+          // Text-style fields show their question as placeholder text inside
+          // the box itself (no separate label line). Choice-based and
+          // non-typing fields (dates, uploads, signatures, etc.) still need
+          // a label above them since there's nowhere else to put the question.
+          const NEEDS_LABEL = ['Date', 'Multiple choice', 'Yes/No', 'Upload', 'Signature', 'Video'];
+          const showLabel = NEEDS_LABEL.includes(f.type);
+          return (
+            <div key={f.id}>
+              {showLabel && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{f.label}{f.required !== false && <span style={{ color: '#c0392b' }}> *</span>}</label>}
+              <FieldInput field={f} value={answers[f.id]} disabled={task.completed} onChange={v => save(f.id, v)} />
+            </div>
+          );
+        })}
       </div>
       <div style={{ marginTop: 16 }}>
         {task.completed
@@ -269,7 +309,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
   );
 }
 
-const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🧠', Learn: '▶️', Book: '📅' };
+const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🧠', Learn: '▶️', Book: '📅', BGCheck: '🛡️' };
 
 export default function JourneyPage() {
   const { id } = useParams(); const nav = useNavigate();

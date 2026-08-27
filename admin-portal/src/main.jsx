@@ -188,7 +188,6 @@ const NAV_ITEMS = [
   { to: '/overview', label: 'Overview', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '50%' },
   { to: '/clients', label: 'People', chip: 'rgba(255,157,192,.22)', dot: '#e0538a', r: '50%' },
   { to: '/journeys', label: 'Templates', chip: 'rgba(34,169,140,.16)', dot: '#22a98c', r: '3px' },
-  { to: '/journeys', label: 'Journey builder', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '3px' },
   { to: '/portal', label: 'Member portal', chip: 'rgba(91,79,214,.14)', dot: '#9a92ff', r: '50%' },
   { to: '/team', label: 'Team', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6', r: '3px' },
   { to: '/webhooks', label: 'Webhooks', chip: 'rgba(30,40,80,.08)', dot: 'rgba(30,40,80,.5)', r: '3px' },
