@@ -404,7 +404,7 @@ export default function JourneyPage() {
                   return (
                     <div key={task.id} style={{ borderBottom: ti < section.tasks.length - 1 ? '1px solid var(--border)' : 'none' }}>
                       <div onClick={() => toggleExpanded(task.id)} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', cursor: 'pointer', background: task.completed ? '#fafffe' : 'white', transition: 'background .12s' }}>
-                        <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, marginTop: 1, border: task.completed ? '2px solid var(--teal)' : '2px solid var(--border-dark)', background: task.completed ? 'var(--teal)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: task.completed ? '2px solid var(--teal)' : '2px solid var(--border-dark)', background: task.completed ? 'var(--teal)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {task.completed && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                         </div>
                         <div style={{ flex: 1 }}>
