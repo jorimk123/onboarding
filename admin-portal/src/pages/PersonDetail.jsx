@@ -263,6 +263,12 @@ export default function PersonDetailPage() {
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.task_title}</div>
                 <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.journey_name} · signed {new Date(s.completed_at).toLocaleDateString()}</div>
               </div>
+              {s.document_url && (
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <a href={s.document_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="View">View</a>
+                  <a href={s.document_url} download={`${s.task_title}.pdf`} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="Download">Download</a>
+                </div>
+              )}
             </div>
           ))}
         </div>

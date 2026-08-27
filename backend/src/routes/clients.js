@@ -240,9 +240,16 @@ router.get('/:clientId/profile', auth('admin'), async (req, res) => {
        JOIN client_journeys cj ON cj.journey_id=j.id AND cj.client_id=$1
        WHERE tr.client_id=$1 AND j.business_id=$2`, [clientId, req.user.business_id]
     );
+    const { rows: submissions } = await pool.query(
+      `SELECT ds.task_id, ds.document_url, ds.status, ds.signed_at FROM docuseal_submissions ds
+       WHERE ds.client_id=$1 ORDER BY ds.created_at DESC`, [clientId]
+    );
     const completedByTask = Object.fromEntries(completions.map(c => [c.task_id, c.completed_at]));
     const responsesByTask = {};
     for (const r of responses) (responsesByTask[r.task_id] ||= {})[r.field_id] = r.value;
+    // First row wins per task since submissions are ordered newest-first.
+    const submissionByTask = {};
+    for (const s of submissions) if (!submissionByTask[s.task_id]) submissionByTask[s.task_id] = s;
 
     // Match intake-form fields to the profile attributes we want to surface,
     // by keyword in the field label — first match wins.
@@ -275,7 +282,11 @@ router.get('/:clientId/profile', auth('admin'), async (req, res) => {
       }
 
       if (task.step_type === 'Sign' && completedByTask[task.id]) {
-        signed.push({ journey_name: task.journey_name, task_title: task.title, completed_at: completedByTask[task.id] });
+        const sub = submissionByTask[task.id];
+        signed.push({
+          journey_name: task.journey_name, task_title: task.title, completed_at: completedByTask[task.id],
+          document_url: sub?.document_url || null,
+        });
       }
     }
 
