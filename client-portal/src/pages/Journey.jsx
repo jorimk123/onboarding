@@ -44,20 +44,38 @@ function SignaturePad({ value, onSave, disabled }) {
 }
 
 // ── YouTube embed w/ watched detection ──────────────────────────
+const VIDEO_UNLOCK_SECONDS = 15;
+
 function YouTubeField({ url, watched, onWatched }) {
   const vid = youtubeId(url);
   const containerId = useRef(`yt-${Math.random().toString(36).slice(2)}`).current;
   const playerRef = useRef(null);
+  const watchedSecondsRef = useRef(0);
+  const tickRef = useRef(null);
+  const watchedRef = useRef(watched);
+  useEffect(() => { watchedRef.current = watched; }, [watched]);
 
   useEffect(() => {
     if (!vid) return;
     let cancelled = false;
+    const clearTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
+    const startTick = () => {
+      clearTick();
+      tickRef.current = setInterval(() => {
+        watchedSecondsRef.current += 1;
+        if (!watchedRef.current && watchedSecondsRef.current >= VIDEO_UNLOCK_SECONDS) onWatched();
+      }, 1000);
+    };
     function makePlayer() {
       if (cancelled || !window.YT || !window.YT.Player) return;
       playerRef.current = new window.YT.Player(containerId, {
         videoId: vid,
         events: {
-          onStateChange: (e) => { if (e.data === window.YT.PlayerState.ENDED) onWatched(); },
+          onStateChange: (e) => {
+            if (e.data === window.YT.PlayerState.PLAYING) startTick();
+            else clearTick();
+            if (e.data === window.YT.PlayerState.ENDED) onWatched();
+          },
         },
       });
     }
@@ -70,7 +88,7 @@ function YouTubeField({ url, watched, onWatched }) {
         document.head.appendChild(s);
       }
     }
-    return () => { cancelled = true; };
+    return () => { cancelled = true; clearTick(); };
   }, [vid]);
 
   if (!vid) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>No video URL set for this step.</div>;
@@ -80,7 +98,7 @@ function YouTubeField({ url, watched, onWatched }) {
         <div id={containerId} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       </div>
       <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: watched ? 'var(--teal)' : 'var(--text3)' }}>
-        {watched ? '✓ Watched' : 'Watch the full video to mark this step complete'}
+        {watched ? '✓ Watched' : `Watch at least ${VIDEO_UNLOCK_SECONDS} seconds to mark this step complete`}
       </div>
     </div>
   );
