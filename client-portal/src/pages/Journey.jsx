@@ -109,8 +109,9 @@ function FieldInput({ field, value, onChange, disabled }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(field.options || []).map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: value === o ? '1.5px solid var(--teal)' : '1.5px solid var(--border)', background: value === o ? 'var(--teal-light)' : 'white', cursor: disabled ? 'default' : 'pointer', fontSize: 14 }}>
-              <input type="radio" name={field.id} disabled={disabled} checked={value === o} onChange={() => onChange(o)} />
+            <label key={o} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: value === o ? '1.5px solid var(--teal)' : '1.5px solid var(--border)', background: value === o ? 'var(--teal-light)' : 'white', cursor: disabled ? 'default' : 'pointer', fontSize: 14 }}>
+              <input type="radio" name={field.id} disabled={disabled} checked={value === o} onChange={() => onChange(o)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, margin: 0 }} />
+              <span style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, boxSizing: 'border-box', border: value === o ? '5px solid var(--teal)' : '1.5px solid var(--border-dark)', background: 'white', transition: 'border .12s' }} />
               {o}
             </label>
           ))}

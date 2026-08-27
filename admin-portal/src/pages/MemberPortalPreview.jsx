@@ -50,8 +50,10 @@ function FieldPreview({ f }) {
       {f.type === 'Multiple choice' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {(f.options || []).map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>
-              <input type="radio" style={{ width: 'auto' }} checked={choice === o} onChange={() => setChoice(o)} />{o}
+            <label key={o} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>
+              <input type="radio" checked={choice === o} onChange={() => setChoice(o)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, margin: 0 }} />
+              <span style={{ width: 15, height: 15, borderRadius: '50%', flexShrink: 0, boxSizing: 'border-box', border: choice === o ? '4.5px solid #5b4fd6' : '1.5px solid rgba(30,40,80,.3)', background: 'white', transition: 'border .12s' }} />
+              {o}
             </label>
           ))}
         </div>
