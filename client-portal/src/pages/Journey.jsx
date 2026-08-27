@@ -292,7 +292,12 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
           : null}
         {!task.completed
           ? <button className="btn btn-primary btn-sm" onClick={() => onComplete(task.id)}>Mark as signed ✓</button>
-          : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Signed</div>}
+          : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Signed</div>
+              <button className="btn btn-secondary btn-sm" onClick={() => onUncomplete(task.id)}>Mark as not done</button>
+            </div>
+          )}
         <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
     );
