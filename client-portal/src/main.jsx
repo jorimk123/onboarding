@@ -25,11 +25,13 @@ function AuthProvider({ children }) {
     const { token, user } = await api.login(email, password);
     if (user.role !== 'client') throw new Error('Please use the admin portal.');
     localStorage.setItem('crm_client_token', token);
+    if (user.business) localStorage.setItem('crm_last_business', JSON.stringify(user.business));
     setUser(user); return user;
   };
   const acceptInvite = async (body) => {
     const { token, user } = await api.acceptInvite(body);
     localStorage.setItem('crm_client_token', token);
+    if (user.business) localStorage.setItem('crm_last_business', JSON.stringify(user.business));
     setUser(user); return user;
   };
   const logout = () => { localStorage.removeItem('crm_client_token'); setUser(null); };
@@ -54,9 +56,14 @@ function ToastProvider({ children }) {
   );
 }
 
-function AuthLayout({ children }) {
+function getCachedBusiness() {
+  try { return JSON.parse(localStorage.getItem('crm_last_business') || 'null'); } catch { return null; }
+}
+
+function AuthLayout({ children, business }) {
   const { user } = useAuth();
-  const logoUrl = user?.business?.logo_url;
+  const biz = business || user?.business || getCachedBusiness();
+  const logoUrl = biz?.logo_url;
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 16 }}>
       <div style={{ marginBottom: 28, textAlign: 'center' }}>
@@ -65,7 +72,7 @@ function AuthLayout({ children }) {
         ) : (
           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>✓</div>
         )}
-        <div style={{ fontSize: 22, fontWeight: 700 }}>{user?.business?.name || 'Onboarding Portal'}</div>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{biz?.name || 'Onboarding Portal'}</div>
       </div>
       <div className="card" style={{ width: '100%', maxWidth: 400, padding: 28 }}>{children}</div>
     </div>
@@ -95,8 +102,8 @@ function AcceptInvitePage() {
   };
 
   return (
-    <AuthLayout>
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Set up your account</div>
+    <AuthLayout business={invite ? { name: invite.business_name, logo_url: invite.business_logo_url } : null}>
+      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>{invite ? `Welcome to Onboarding with ${invite.business_name}` : 'Set up your account'}</div>
       {invite && <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>You've been invited by {invite.business_name}{invite.journey_name ? ` — you'll start with "${invite.journey_name}"` : ''}.</div>}
       {loadErr ? (
         <div className="form-error">{loadErr}</div>
@@ -122,13 +129,14 @@ function LoginPage() {
   const { login } = useAuth(); const nav = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [err, setErr] = useState(''); const [loading, setLoading] = useState(false);
+  const cachedBiz = getCachedBusiness();
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setLoading(true);
     try { await login(form.email, form.password); nav('/'); } catch (e) { setErr(e.message); } finally { setLoading(false); }
   };
   return (
     <AuthLayout>
-      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Welcome back</div>
+      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>{cachedBiz?.name ? `Welcome back to Onboarding with ${cachedBiz.name}` : 'Welcome back'}</div>
       <form onSubmit={submit}>
         <div className="form-group"><label>Email</label><input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required autoFocus /></div>
         <div className="form-group"><label>Password</label><input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required /></div>

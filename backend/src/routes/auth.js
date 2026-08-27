@@ -77,7 +77,7 @@ router.get('/invites/:token', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT i.email, i.name, i.role, i.status, i.expires_at,
-              b.name AS business_name, j.name AS journey_name
+              b.name AS business_name, b.logo_url AS business_logo_url, j.name AS journey_name
        FROM invites i
        JOIN businesses b ON b.id = i.business_id
        LEFT JOIN journeys j ON j.id = i.journey_id
