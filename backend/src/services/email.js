@@ -5,6 +5,7 @@ const { Resend } = require('resend');
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.EMAIL_FROM || 'onboarding@yourdomain.com';
 const CLIENT_URL = process.env.CLIENT_PORTAL_URL || 'http://localhost:5174';
+const ADMIN_URL = process.env.ADMIN_PORTAL_URL || 'http://localhost:5173';
 
 async function sendWelcomeEmail({ to, name, journeyName }) {
   if (!process.env.RESEND_API_KEY) return;
@@ -72,4 +73,15 @@ async function sendReviewerNotification({ to, clientName, taskTitle, journeyName
   });
 }
 
-module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail, sendWeeklyDigestEmail, sendReviewerNotification };
+async function sendPasswordResetEmail({ to, name, token, role }) {
+  const portalUrl = role === 'client' ? CLIENT_URL : ADMIN_URL;
+  const link = `${portalUrl}/reset-password?token=${token}`;
+  if (!process.env.RESEND_API_KEY) { console.log(`[email] (dev) password reset link for ${to}: ${link}`); return; }
+  await resend.emails.send({
+    from: FROM, to,
+    subject: `Reset your password`,
+    html: `<p>Hi ${name || ''},</p><p>We received a request to reset your password. This link expires in 1 hour.</p><p><a href="${link}">Reset your password →</a></p><p>If you didn't request this, you can safely ignore this email.</p>`,
+  });
+}
+
+module.exports = { sendWelcomeEmail, sendCompletionEmail, sendAdminInviteEmail, sendClientInviteEmail, sendWeeklyDigestEmail, sendReviewerNotification, sendPasswordResetEmail };

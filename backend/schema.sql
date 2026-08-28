@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS users (
 -- be a client of one business and an admin of another.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_global_owner_admin ON users(email) WHERE role IN ('owner','admin');
 
+-- Forgot-password support (added post-launch).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token) WHERE reset_token IS NOT NULL;
+
 -- ── Invites ──────────────────────────────────────────────────
 -- Admins invite other admins (owner only) or clients (owner/admin) via a
 -- unique token link. Client invites can optionally pre-assign a journey.

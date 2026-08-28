@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const { dispatch } = require('../webhooks/dispatcher');
-const { sendWelcomeEmail } = require('../services/email');
+const { sendWelcomeEmail, sendPasswordResetEmail } = require('../services/email');
 const { sendDocument } = require('../services/docuseal');
 
 function sign(user) {
@@ -192,6 +192,54 @@ router.post('/login', async (req, res) => {
         },
       },
     });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── POST /auth/forgot-password ───────────────────────────────────
+// Always responds the same way whether or not the email exists, so the
+// endpoint can't be used to enumerate accounts.
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, role FROM users WHERE email=$1 ORDER BY created_at DESC`,
+      [email.toLowerCase().trim()]
+    );
+    if (rows.length) {
+      const user = rows[0];
+      const token = crypto.randomBytes(32).toString('hex');
+      await pool.query(
+        `UPDATE users SET reset_token=$1, reset_token_expires=NOW() + INTERVAL '1 hour' WHERE id=$2`,
+        [token, user.id]
+      );
+      sendPasswordResetEmail({ to: email.toLowerCase().trim(), name: user.name, token, role: user.role }).catch(console.error);
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── POST /auth/reset-password ────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'token and password are required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, reset_token_expires FROM users WHERE reset_token=$1`,
+      [token]
+    );
+    if (!rows.length) return res.status(400).json({ error: 'This reset link is invalid or has already been used.' });
+    const user = rows[0];
+    if (new Date(user.reset_token_expires) < new Date()) {
+      return res.status(400).json({ error: 'This reset link has expired. Request a new one.' });
+    }
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query(
+      `UPDATE users SET password=$1, reset_token=NULL, reset_token_expires=NULL WHERE id=$2`,
+      [hash, user.id]
+    );
+    res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

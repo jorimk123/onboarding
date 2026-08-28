@@ -143,9 +143,91 @@ function LoginPage() {
         {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
         <button className="btn btn-primary btn-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
       </form>
-      <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--text2)' }}>
+      <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13 }}>
+        <Link to="/forgot-password" style={{ color: 'var(--teal)', fontWeight: 500 }}>Forgot password?</Link>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 10, fontSize: 13, color: 'var(--text2)' }}>
         No account yet? You'll need an invite link from your onboarding contact.
       </div>
+    </AuthLayout>
+  );
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState(''); const [loading, setLoading] = useState(false);
+  const cachedBiz = getCachedBusiness();
+  const submit = async (e) => {
+    e.preventDefault(); setErr(''); setLoading(true);
+    try { await api.forgotPassword(email); setSent(true); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
+  };
+  return (
+    <AuthLayout>
+      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Reset your password</div>
+      {sent ? (
+        <div style={{ fontSize: 13.5, color: 'var(--text2)' }}>
+          If an account exists for that email{cachedBiz?.name ? ` with ${cachedBiz.name}` : ''}, we've sent a link to reset your password. Check your inbox.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Enter your email and we'll send you a link to reset your password.</div>
+          <form onSubmit={submit}>
+            <div className="form-group"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus /></div>
+            {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
+            <button className="btn btn-primary btn-full" disabled={loading}>{loading ? 'Sending…' : 'Send reset link'}</button>
+          </form>
+        </>
+      )}
+      <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--text2)' }}>
+        <Link to="/login" style={{ color: 'var(--teal)', fontWeight: 500 }}>Back to sign in</Link>
+      </div>
+    </AuthLayout>
+  );
+}
+
+function ResetPasswordPage() {
+  const nav = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') || '';
+  const [password, setPassword] = useState(''); const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState(''); const [loading, setLoading] = useState(false); const [done, setDone] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (password.length < 8) { setErr('Password must be at least 8 characters'); return; }
+    if (password !== confirm) { setErr('Passwords do not match'); return; }
+    setErr(''); setLoading(true);
+    try { await api.resetPassword(token, password); setDone(true); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
+  };
+  if (!token) {
+    return (
+      <AuthLayout>
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Reset your password</div>
+        <div className="form-error">This reset link is missing or invalid. Request a new one.</div>
+        <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13 }}>
+          <Link to="/forgot-password" style={{ color: 'var(--teal)', fontWeight: 500 }}>Request a new link</Link>
+        </div>
+      </AuthLayout>
+    );
+  }
+  return (
+    <AuthLayout>
+      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Set a new password</div>
+      {done ? (
+        <div>
+          <div style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 16 }}>Your password has been reset.</div>
+          <button className="btn btn-primary btn-full" onClick={() => nav('/login')}>Sign in →</button>
+        </div>
+      ) : (
+        <form onSubmit={submit} style={{ marginTop: 14 }}>
+          <div className="form-group"><label>New password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="At least 8 characters" autoFocus /></div>
+          <div className="form-group"><label>Confirm new password</label><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
+          {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
+          <button className="btn btn-primary btn-full" disabled={loading}>{loading ? 'Saving…' : 'Reset password'}</button>
+        </form>
+      )}
     </AuthLayout>
   );
 }
@@ -163,6 +245,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/" element={<RequireClient><DashboardPage /></RequireClient>} />
           <Route path="/journey/:id" element={<RequireClient><JourneyPage /></RequireClient>} />
           <Route path="*" element={<Navigate to="/" replace />} />

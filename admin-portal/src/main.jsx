@@ -91,9 +91,89 @@ function LoginPage() {
           {err && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</div>}
           <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
         </form>
-        <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--text2)' }}>
+        <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13 }}>
+          <Link to="/forgot-password" style={{ color: 'var(--purple)', fontWeight: 500 }}>Forgot password?</Link>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 10, fontSize: 13, color: 'var(--text2)' }}>
           New business? <Link to="/signup" style={{ color: 'var(--purple)', fontWeight: 500 }}>Create an account</Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState(''); const [loading, setLoading] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault(); setErr(''); setLoading(true);
+    try { await api.forgotPassword(email); setSent(true); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
+  };
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 16 }}>
+      <div className="card" style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--purple)', marginBottom: 4 }}>Onboarding CRM</div>
+          <div style={{ color: 'var(--text2)', fontSize: 13 }}>Reset your password</div>
+        </div>
+        {sent ? (
+          <div style={{ fontSize: 13.5, color: 'var(--text2)' }}>If an account exists for that email, we've sent a link to reset your password. Check your inbox.</div>
+        ) : (
+          <form onSubmit={submit}>
+            <div className="form-group"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="admin@example.com" autoFocus /></div>
+            {err && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</div>}
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>{loading ? 'Sending…' : 'Send reset link'}</button>
+          </form>
+        )}
+        <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--text2)' }}>
+          <Link to="/login" style={{ color: 'var(--purple)', fontWeight: 500 }}>Back to sign in</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordPage() {
+  const nav = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') || '';
+  const [password, setPassword] = useState(''); const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState(''); const [loading, setLoading] = useState(false); const [done, setDone] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (password.length < 8) { setErr('Password must be at least 8 characters'); return; }
+    if (password !== confirm) { setErr('Passwords do not match'); return; }
+    setErr(''); setLoading(true);
+    try { await api.resetPassword(token, password); setDone(true); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
+  };
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 16 }}>
+      <div className="card" style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--purple)', marginBottom: 4 }}>Onboarding CRM</div>
+          <div style={{ color: 'var(--text2)', fontSize: 13 }}>Set a new password</div>
+        </div>
+        {!token ? (
+          <div>
+            <div style={{ color: 'var(--red)', fontSize: 14, textAlign: 'center', marginBottom: 12 }}>This reset link is missing or invalid.</div>
+            <div style={{ textAlign: 'center', fontSize: 13 }}><Link to="/forgot-password" style={{ color: 'var(--purple)', fontWeight: 500 }}>Request a new link</Link></div>
+          </div>
+        ) : done ? (
+          <div>
+            <div style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 16 }}>Your password has been reset.</div>
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => nav('/login')}>Sign in →</button>
+          </div>
+        ) : (
+          <form onSubmit={submit}>
+            <div className="form-group"><label>New password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="At least 8 characters" autoFocus /></div>
+            <div className="form-group"><label>Confirm new password</label><input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></div>
+            {err && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</div>}
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>{loading ? 'Saving…' : 'Reset password'}</button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -560,6 +640,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
           <Route path="/overview" element={<RequireAdmin><OverviewPage /></RequireAdmin>} />
           <Route path="/journeys" element={<RequireAdmin><JourneysPage /></RequireAdmin>} />
