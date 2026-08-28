@@ -223,7 +223,7 @@ router.get('/:clientId/profile', auth('admin'), async (req, res) => {
     if (!cRows.length) return res.status(404).json({ error: 'Client not found' });
 
     const { rows: tasks } = await pool.query(
-      `SELECT t.id, t.title, t.step_type, t.fields, j.name AS journey_name
+      `SELECT t.id, t.title, t.step_type, t.fields, t.docuseal_template_id, j.name AS journey_name
        FROM tasks t JOIN sections s ON t.section_id=s.id JOIN journeys j ON s.journey_id=j.id
        JOIN client_journeys cj ON cj.journey_id=j.id AND cj.client_id=$1
        WHERE j.business_id=$2`, [clientId, req.user.business_id]
@@ -286,6 +286,8 @@ router.get('/:clientId/profile', auth('admin'), async (req, res) => {
         signed.push({
           journey_name: task.journey_name, task_title: task.title, completed_at: completedByTask[task.id],
           document_url: sub?.document_url || null,
+          docuseal_status: sub?.status || null,
+          has_docuseal: !!task.docuseal_template_id,
         });
       }
     }
