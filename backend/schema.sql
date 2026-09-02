@@ -130,18 +130,14 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_amount_cents INT;        -- s
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS payment_currency TEXT DEFAULT 'usd';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checkr_package TEXT;             -- step_type='Check', non-quiz
 
--- BGCheck step type (MinistrySafe background checks). Re-run-safe: drop
--- and recreate the CHECK constraint so this migration can apply cleanly
--- whether or not it's already been run.
-ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_step_type_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_step_type_check
-  CHECK (step_type IN ('Form','Upload','Sign','Check','Learn','Book','Pay','BGCheck'));
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_level INT;                    -- step_type='BGCheck', 1-7
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_package_code TEXT;            -- alternative to level
 
--- Link step type: admin pastes a URL, client is sent there to complete a
--- task off-platform (e.g. a third-party form or survey), then marks it
--- done themselves. Reuses the existing booking_url column for storage.
+-- Step-type CHECK constraint, current full allowlist. Re-run-safe: drop and
+-- recreate in one shot so this migration applies cleanly regardless of what
+-- step types already exist in the data — never narrow this list down to an
+-- intermediate historical state, since that would fail against live rows
+-- using a type from a later addition (e.g. 'Link', 'BGCheck').
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_step_type_check;
 ALTER TABLE tasks ADD CONSTRAINT tasks_step_type_check
   CHECK (step_type IN ('Form','Upload','Sign','Check','Learn','Book','Pay','BGCheck','Link'));
