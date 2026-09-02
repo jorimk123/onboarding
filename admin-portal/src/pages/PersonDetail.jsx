@@ -11,7 +11,7 @@ function StepRow({ task, index, clientId, onCleared, toast }) {
   const [open, setOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const responseEntries = Object.entries(task.responses || {});
-  const hasBody = responseEntries.length > 0 || task.step_type === 'Sign' || task.step_type === 'Book' || task.step_type === 'BGCheck';
+  const hasBody = responseEntries.length > 0 || task.step_type === 'Sign' || task.step_type === 'Book' || task.step_type === 'BGCheck' || task.step_type === 'Link';
 
   const markCleared = async () => {
     setClearing(true);
@@ -66,7 +66,8 @@ function StepRow({ task, index, clientId, onCleared, toast }) {
           ) : (
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               {task.step_type === 'Sign' ? (task.completed ? 'Document signed.' : 'Not signed yet.') :
-               task.step_type === 'Book' ? (task.completed ? 'Call booked.' : 'Not booked yet.') : 'No answers submitted yet.'}
+               task.step_type === 'Book' ? (task.completed ? 'Call booked.' : 'Not booked yet.') :
+               task.step_type === 'Link' ? (task.completed ? 'Marked done.' : 'Not completed yet.') : 'No answers submitted yet.'}
             </div>
           )}
           {task.completed_at && <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>Completed {new Date(task.completed_at).toLocaleString()}</div>}

@@ -106,6 +106,16 @@ function StepPreviewBody({ task }) {
       </div>
     );
   }
+  if (task.step_type === 'Link') {
+    return (
+      <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,.75)', border: '1px solid rgba(255,255,255,.9)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a2038', marginBottom: 6 }}>Complete this task</div>
+        {task.booking_url
+          ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Open link →</a>
+          : <div style={{ fontSize: 12, color: 'rgba(30,40,80,.5)' }}>No link added yet — add one in the Journey Builder.</div>}
+      </div>
+    );
+  }
   if (task.step_type === 'BGCheck') {
     return (
       <div style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,.75)', border: '1px solid rgba(255,255,255,.9)' }}>

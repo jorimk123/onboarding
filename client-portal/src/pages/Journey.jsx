@@ -252,6 +252,21 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
     );
   }
 
+  if (task.step_type === 'Link') {
+    return (
+      <div>
+        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 12 }}>{task.description}</p>
+        {task.booking_url
+          ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex' }}>Open link →</a>
+          : <div style={{ fontSize: 13, color: 'var(--text3)' }}>No link has been set up yet.</div>}
+        {!task.completed && (
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onComplete(task.id)}>I've completed it</button>
+        )}
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
+      </div>
+    );
+  }
+
   if (task.step_type === 'BGCheck') {
     const bc = task.background_check;
     const start = async () => {
@@ -333,7 +348,7 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
   );
 }
 
-const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🧠', Learn: '▶️', Book: '📅', BGCheck: '🛡️' };
+const STEP_ICON = { Form: '📝', Upload: '📎', Sign: '✍️', Check: '🧠', Learn: '▶️', Book: '📅', BGCheck: '🛡️', Link: '🔗' };
 
 export default function JourneyPage() {
   const { id } = useParams(); const nav = useNavigate();

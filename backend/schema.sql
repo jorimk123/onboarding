@@ -139,6 +139,13 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_step_type_check
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_level INT;                    -- step_type='BGCheck', 1-7
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ministrysafe_package_code TEXT;            -- alternative to level
 
+-- Link step type: admin pastes a URL, client is sent there to complete a
+-- task off-platform (e.g. a third-party form or survey), then marks it
+-- done themselves. Reuses the existing booking_url column for storage.
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_step_type_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_step_type_check
+  CHECK (step_type IN ('Form','Upload','Sign','Check','Learn','Book','Pay','BGCheck','Link'));
+
 -- Per-step behavior settings (Journey Builder "Edit step" panel).
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS required_to_continue BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS allow_skip BOOLEAN NOT NULL DEFAULT FALSE;

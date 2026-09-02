@@ -141,7 +141,7 @@ router.delete('/:id/sections/:sid', auth('admin'), assertOwnsJourney, async (req
 // ── Tasks ───────────────────────────────────────────────────────
 // step_type: Form | Upload | Sign | Check | Learn | Book
 // fields: [{ id, label, type, options?: string[], url?: string, required?: bool }]
-const STEP_TYPES = ['Form', 'Upload', 'Sign', 'Check', 'Learn', 'Book', 'BGCheck'];
+const STEP_TYPES = ['Form', 'Upload', 'Sign', 'Check', 'Learn', 'Book', 'BGCheck', 'Link'];
 
 function normalizeFields(fields) {
   if (!Array.isArray(fields)) return [];

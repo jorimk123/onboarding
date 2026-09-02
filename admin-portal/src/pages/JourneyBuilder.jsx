@@ -11,6 +11,34 @@ export const STEP_TYPES = [
   { id: 'Learn', label: 'Training module', chip: 'rgba(107,79,213,.14)', dot: '#6b4fd5', blurb: 'Videos they watch before Next unlocks.' },
   { id: 'Book', label: 'Schedule a call', chip: 'rgba(34,169,140,.16)', dot: '#177a66', blurb: 'Link out to a booking page (Calendly, Cal.com, etc).' },
   { id: 'BGCheck', label: 'Background check', chip: 'rgba(255,196,120,.32)', dot: '#a8600d', blurb: 'Order a MinistrySafe background check.' },
+  { id: 'Link', label: 'External link', chip: 'rgba(130,225,225,.3)', dot: '#12706f', blurb: 'Send them to a URL to complete a task, then they mark it done.' },
+];
+
+// Presets are quick-add shortcuts shown alongside the raw step types — they
+// insert a real step (usually 'Form') pre-filled with a title/fields combo
+// instead of an empty one, so admins don't have to hand-build common forms.
+export const REFERENCE_CHECK_FIELDS = [
+  { label: 'Church', type: 'Short text', required: true },
+  { label: "Pastor's Name", type: 'Short text', required: true },
+  { label: "Pastor's Contact Number", type: 'Phone', required: true },
+  { label: "Pastor's Email", type: 'Email', required: true },
+  { label: 'Company / Organization', type: 'Short text', required: true },
+  { label: 'Leader Full Name', type: 'Short text', required: true },
+  { label: 'Contact Number', type: 'Phone', required: true },
+  { label: 'Email', type: 'Email', required: true },
+  { label: "Family Member's Full Name", type: 'Short text', required: true },
+  { label: 'Contact Number', type: 'Phone', required: true },
+  { label: 'Email', type: 'Email', required: true },
+  { label: 'Relationship To Reference', type: 'Short text', required: true },
+];
+
+export const STEP_PRESETS = [
+  {
+    id: 'ReferenceCheck', label: 'Reference check', chip: 'rgba(91,79,214,.14)', dot: '#5b4fd6',
+    stepType: 'Form', title: 'Reference Check',
+    description: 'Please provide the following information. We will send a reference check form to be completed on your behalf.',
+    fields: REFERENCE_CHECK_FIELDS,
+  },
 ];
 
 export const MINISTRYSAFE_LEVELS = [
@@ -42,6 +70,7 @@ function stepSummary(task) {
   if (isQuiz) return `${(task.fields || []).filter(f => f.type === 'Multiple choice').length} questions`;
   if (task.step_type === 'Sign') return task.docuseal_template_id ? 'DocuSeal' : 'DocuSeal · not set up';
   if (task.step_type === 'Book') return task.booking_url ? 'Booking link set' : 'No booking link yet';
+  if (task.step_type === 'Link') return task.booking_url ? 'Link set' : 'No link set yet';
   if (task.step_type === 'BGCheck') return task.ministrysafe_package_code ? `MinistrySafe · ${task.ministrysafe_package_code}` : `MinistrySafe · Level ${task.ministrysafe_level || 1}`;
   if ((task.fields || []).length) return `${task.fields.length} field${task.fields.length !== 1 ? 's' : ''}`;
   return task.step_type;
@@ -56,7 +85,7 @@ function stepSubtitle(task) {
 function badgeClassForType(stepType) {
   if (stepType === 'Sign') return 'flat-badge-pink';
   if (stepType === 'Check' || stepType === 'BGCheck') return 'flat-badge-amber';
-  if (stepType === 'Upload' || stepType === 'Book') return 'flat-badge-teal';
+  if (stepType === 'Upload' || stepType === 'Book' || stepType === 'Link') return 'flat-badge-teal';
   return 'flat-badge-purple';
 }
 
@@ -135,12 +164,16 @@ export default function JourneyBuilderPage() {
   const insertStepAt = async (stepTypeId, atIndex) => {
     try {
       const sid = await ensureSectionId();
-      const meta = stepMeta(stepTypeId);
+      const preset = STEP_PRESETS.find(p => p.id === stepTypeId);
+      const meta = stepMeta(preset ? preset.stepType : stepTypeId);
       const toShift = steps.slice(atIndex);
       if (toShift.length) {
         await Promise.all(toShift.map(t => api.updateTask(id, t.sectionId, t.id, { ...t, position: t.position + 1 })));
       }
-      const created = await api.createTask(id, sid, {
+      const created = await api.createTask(id, sid, preset ? {
+        title: preset.title, description: preset.description, step_type: preset.stepType,
+        fields: preset.fields, position: atIndex,
+      } : {
         title: `New ${meta.label.toLowerCase()}`, step_type: stepTypeId, position: atIndex,
         ...defaultsForType(stepTypeId),
       });
@@ -220,14 +253,14 @@ export default function JourneyBuilderPage() {
     try {
       let outFields = draft.fields;
       if (draft.step_type === 'Check') outFields = draft.fields.filter(f => f.type === 'Multiple choice');
-      else if (draft.step_type === 'Sign' || draft.step_type === 'Book' || draft.step_type === 'BGCheck') outFields = [];
+      else if (draft.step_type === 'Sign' || draft.step_type === 'Book' || draft.step_type === 'BGCheck' || draft.step_type === 'Link') outFields = [];
 
       await api.updateTask(id, selectedTask.sectionId, selectedTask.id, {
         title: draft.title, description: draft.description, tag: draft.tag || null, assignee: draft.assignee || null,
         step_type: draft.step_type, fields: outFields, position: selectedTask.position,
         docuseal_template_id: draft.step_type === 'Sign' ? (draft.docuseal_template_id || null) : null,
         docuseal_trigger: draft.docuseal_trigger,
-        booking_url: draft.step_type === 'Book' ? (draft.booking_url || null) : null,
+        booking_url: (draft.step_type === 'Book' || draft.step_type === 'Link') ? (draft.booking_url || null) : null,
         ministrysafe_level: draft.step_type === 'BGCheck' && !draft.ministrysafe_package_code ? (draft.ministrysafe_level || 1) : null,
         ministrysafe_package_code: draft.step_type === 'BGCheck' ? (draft.ministrysafe_package_code || null) : null,
         required_to_continue: draft.required_to_continue, allow_skip: draft.allow_skip,
@@ -272,6 +305,16 @@ export default function JourneyBuilderPage() {
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text3)', marginBottom: 10 }}>Add a step</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {STEP_TYPES.map(s => (
+            <button key={s.id} type="button" onClick={() => addStep(s.id)}
+              draggable onDragStart={e => handlePaletteDragStart(e, s.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, border: '1px solid var(--hairline)', background: 'rgba(255,255,255,.6)', cursor: 'grab', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+              <span style={{ width: 22, height: 22, borderRadius: 7, background: s.chip, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 3, background: s.dot }} />
+              </span>
+              {s.label}
+            </button>
+          ))}
+          {STEP_PRESETS.map(s => (
             <button key={s.id} type="button" onClick={() => addStep(s.id)}
               draggable onDragStart={e => handlePaletteDragStart(e, s.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 12, border: '1px solid var(--hairline)', background: 'rgba(255,255,255,.6)', cursor: 'grab', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
@@ -414,7 +457,10 @@ function FieldList({ fields, setFields, allowedTypes, addLabel }) {
       {fields.map((f, i) => (
         <div key={f.id} style={{ border: '1px solid var(--hairline)', borderRadius: 12, padding: 10, marginBottom: 8, background: 'rgba(255,255,255,.6)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-            <input value={f.label} onChange={e => update(i, { label: e.target.value })} placeholder={`Question ${i + 1}`} style={{ flex: 1, fontSize: 12.5 }} />
+            {f.type !== 'Video' && (
+              <input value={f.label} onChange={e => update(i, { label: e.target.value })} placeholder={`Question ${i + 1}`} style={{ flex: 1, fontSize: 12.5 }} />
+            )}
+            {f.type === 'Video' && <div style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: 'var(--text2)' }}>Video {i + 1}</div>}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => move(i, 1)} disabled={i === fields.length - 1}>↓</button>
             <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => remove(i)}>✕</button>
@@ -509,6 +555,16 @@ function StepFieldsEditor({ draft, patch, dirty, saving, onPublish }) {
         <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginBottom: 4 }}>
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Booking link</div>
           <input value={draft.booking_url} onChange={e => patch({ booking_url: e.target.value })} placeholder="https://calendly.com/…" style={{ fontSize: 12.5 }} />
+        </div>
+      )}
+
+      {draft.step_type === 'Link' && (
+        <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12, marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Task link</div>
+          <input value={draft.booking_url} onChange={e => patch({ booking_url: e.target.value })} placeholder="https://…" style={{ fontSize: 12.5 }} />
+          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 8 }}>
+            They'll see a button that opens this URL in a new tab, then mark the step done themselves once they've completed it there.
+          </div>
         </div>
       )}
 
