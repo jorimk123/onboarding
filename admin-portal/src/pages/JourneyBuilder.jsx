@@ -55,7 +55,7 @@ export const FIELD_TYPES = ['Short text', 'Long text', 'Email', 'Phone', 'Date',
 
 const stepMeta = id => STEP_TYPES.find(s => s.id === id) || STEP_TYPES[0];
 const uid = () => 'f' + Math.random().toString(36).slice(2, 9);
-const emptyField = (type = 'Short text') => ({ id: uid(), label: '', type, options: ['Option 1', 'Option 2'], url: '', required: true });
+const emptyField = (type = 'Short text') => ({ id: uid(), label: '', type, options: ['Option 1', 'Option 2'], url: '', required: true, multi: false });
 
 function defaultsForType(id) {
   if (id === 'Upload') return { fields: [emptyField('Upload')] };
@@ -471,7 +471,15 @@ function FieldList({ fields, setFields, allowedTypes, addLabel }) {
             </select>
           )}
           {f.type === 'Multiple choice' && (
-            <OptionsEditor options={f.options && f.options.length ? f.options : ['Option 1']} setOptions={opts => update(i, { options: opts })} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text3)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!f.multi} onChange={e => update(i, { multi: e.target.checked })} />
+                Allow multiple answers
+              </label>
+            </div>
+          )}
+          {f.type === 'Multiple choice' && (
+            <OptionsEditor options={f.options && f.options.length ? f.options : ['Option 1']} setOptions={opts => update(i, { options: opts })} multi={!!f.multi} />
           )}
           {f.type === 'Dropdown' && (
             <textarea rows={2} value={(f.options || []).join('\n')} onChange={e => update(i, { options: e.target.value.split('\n') })} placeholder={'Option A\nOption B'} style={{ fontSize: 12.5 }} />
@@ -489,7 +497,7 @@ function FieldList({ fields, setFields, allowedTypes, addLabel }) {
 // Explicit answer editor for quiz (Multiple choice) questions — the admin
 // types out each possible answer as its own field, 1 to 5 of them, and the
 // client picks exactly one when they take the quiz.
-function OptionsEditor({ options, setOptions }) {
+function OptionsEditor({ options, setOptions, multi }) {
   const opts = options && options.length ? options : ['Option 1'];
   const update = (i, val) => setOptions(opts.map((o, oi) => (oi === i ? val : o)));
   const remove = i => setOptions(opts.filter((_, oi) => oi !== i));
@@ -499,7 +507,7 @@ function OptionsEditor({ options, setOptions }) {
     <div>
       {opts.map((o, i) => (
         <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-          <span style={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid var(--border-dark)', flexShrink: 0 }} />
+          <span style={{ width: 18, height: 18, borderRadius: multi ? 5 : '50%', border: '1.5px solid var(--border-dark)', flexShrink: 0 }} />
           <input value={o} onChange={e => update(i, e.target.value)} placeholder={`Answer ${i + 1}`} style={{ flex: 1, fontSize: 12.5 }} />
           <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => remove(i)} disabled={opts.length <= 1} title="Remove answer">✕</button>
         </div>

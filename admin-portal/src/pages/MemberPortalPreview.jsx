@@ -25,6 +25,7 @@ function FieldPreview({ f }) {
   const [val, setVal] = useState('');
   const [checked, setChecked] = useState(false);
   const [choice, setChoice] = useState('');
+  const [multiChoice, setMultiChoice] = useState([]);
   const inputStyle = { fontSize: 12.5 };
 
   // Text-style fields carry their question as placeholder text inside the
@@ -47,7 +48,21 @@ function FieldPreview({ f }) {
           {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       )}
-      {f.type === 'Multiple choice' && (
+      {f.type === 'Multiple choice' && f.multi && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {(f.options || []).map(o => {
+            const on = multiChoice.includes(o);
+            return (
+              <label key={o} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>
+                <input type="checkbox" checked={on} onChange={() => setMultiChoice(m => on ? m.filter(x => x !== o) : [...m, o])} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, margin: 0 }} />
+                <span style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, boxSizing: 'border-box', border: on ? '1.5px solid #5b4fd6' : '1.5px solid rgba(30,40,80,.3)', background: on ? '#5b4fd6' : 'white', color: 'white', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border .12s, background .12s' }}>{on ? '✓' : ''}</span>
+                {o}
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {f.type === 'Multiple choice' && !f.multi && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {(f.options || []).map(o => (
             <label key={o} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, fontSize: 12.5, color: '#1a2038', cursor: 'pointer' }}>

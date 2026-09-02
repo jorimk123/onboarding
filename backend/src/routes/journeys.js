@@ -152,6 +152,7 @@ function normalizeFields(fields) {
     options: Array.isArray(f.options) ? f.options.filter(Boolean) : undefined,
     url: f.url || undefined,
     required: f.required !== false,
+    multi: f.multi === true ? true : undefined,
   }));
 }
 

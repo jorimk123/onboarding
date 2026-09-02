@@ -123,7 +123,25 @@ function FieldInput({ field, value, onChange, disabled }) {
           {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       );
-    case 'Multiple choice':
+    case 'Multiple choice': {
+      if (field.multi) {
+        const arr = Array.isArray(value) ? value : [];
+        const toggle = o => onChange(arr.includes(o) ? arr.filter(x => x !== o) : [...arr, o]);
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(field.options || []).map(o => {
+              const checked = arr.includes(o);
+              return (
+                <label key={o} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: checked ? '1.5px solid var(--teal)' : '1.5px solid var(--border)', background: checked ? 'var(--teal-light)' : 'white', cursor: disabled ? 'default' : 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" disabled={disabled} checked={checked} onChange={() => toggle(o)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, margin: 0 }} />
+                  <span style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, boxSizing: 'border-box', border: checked ? '1.5px solid var(--teal)' : '1.5px solid var(--border-dark)', background: checked ? 'var(--teal)' : 'white', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border .12s, background .12s' }}>{checked ? '✓' : ''}</span>
+                  {o}
+                </label>
+              );
+            })}
+          </div>
+        );
+      }
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(field.options || []).map(o => (
@@ -135,6 +153,7 @@ function FieldInput({ field, value, onChange, disabled }) {
           ))}
         </div>
       );
+    }
     case 'Yes/No':
       return (
         <div style={{ display: 'flex', gap: 10 }}>
@@ -184,7 +203,7 @@ function QuizRunner({ task, answers, onAnswer, onFinish }) {
   const [qi, setQi] = useState(0);
   const q = questions[qi];
   if (!q) return null;
-  const answered = answers[q.id] != null;
+  const answered = q.multi ? Array.isArray(answers[q.id]) && answers[q.id].length > 0 : answers[q.id] != null;
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', marginBottom: 10 }}>Question {qi + 1} of {questions.length}</div>
@@ -225,7 +244,9 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
   const requiredFields = (task.fields || []).filter(f => f.required !== false);
   const allRequiredFilled = requiredFields.every(f => {
     const v = answers[f.id];
-    return f.type === 'Checkbox' ? true : v !== undefined && v !== null && v !== '';
+    if (f.type === 'Checkbox') return true;
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== undefined && v !== null && v !== '';
   });
 
   if (isQuizStep(task)) {

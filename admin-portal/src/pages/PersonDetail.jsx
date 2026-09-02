@@ -46,7 +46,7 @@ function StepRow({ task, index, clientId, onCleared, toast }) {
             return (
               <div key={fid}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{field?.label || fid}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 2 }}>{String(val ?? '') || '—'}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 2 }}>{Array.isArray(val) ? (val.join(', ') || '—') : (String(val ?? '') || '—')}</div>
               </div>
             );
           }) : task.step_type === 'BGCheck' ? (
