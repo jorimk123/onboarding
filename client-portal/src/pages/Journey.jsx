@@ -385,14 +385,30 @@ export default function JourneyPage() {
 
   const toggleExpanded = (taskId) => setExpanded(s => { const n = new Set(s); n.has(taskId) ? n.delete(taskId) : n.add(taskId); return n; });
 
+  // After a step is done (completed or skipped), collapse it and open the
+  // next not-yet-done step (in section/position order) so the person can
+  // just keep moving down the list without manually opening each one.
+  const advancePast = (taskId) => {
+    if (!journey) return;
+    const flat = journey.sections.flatMap(s => s.tasks);
+    const idx = flat.findIndex(t => t.id === taskId);
+    const next = idx >= 0 ? flat.slice(idx + 1).find(t => !t.completed) : null;
+    setExpanded(s => {
+      const n = new Set(s);
+      n.delete(taskId);
+      if (next) n.add(next.id);
+      return n;
+    });
+  };
+
   const complete = async (taskId) => {
-    try { await api.completeTask(taskId); toast('Task completed ✓'); load(); } catch (err) { toast(err.message, 'error'); }
+    try { await api.completeTask(taskId); toast('Task completed ✓'); advancePast(taskId); load(); } catch (err) { toast(err.message, 'error'); }
   };
   const uncomplete = async (taskId) => {
     try { await api.uncompleteTask(taskId); load(); } catch (err) { toast(err.message, 'error'); }
   };
   const saveField = (taskId, fieldId, value) => api.saveField(taskId, fieldId, value);
-  const skip = async (taskId) => { await api.skipTask(taskId); load(); };
+  const skip = async (taskId) => { await api.skipTask(taskId); advancePast(taskId); load(); };
 
   if (loading) return <div className="spinner" />;
   if (!journey) return null;
