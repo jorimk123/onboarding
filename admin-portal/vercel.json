@@ -1,5 +1,16 @@
 {
   "rewrites": [
+    { "source": "/admin/assets/:path*", "destination": "/assets/:path*" },
+
+    { "source": "/assets/:path*", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/assets/:path*" },
+    { "source": "/", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/" },
+    { "source": "/login", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/login" },
+    { "source": "/forgot-password", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/forgot-password" },
+    { "source": "/reset-password", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/reset-password" },
+    { "source": "/accept-invite", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/accept-invite" },
+    { "source": "/journey/:id", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/journey/:id" },
+    { "source": "/join/:journeyId", "has": [{ "type": "header", "key": "host", "value": "www.easyonboardings.com" }], "destination": "https://app.easyonboardings.com/join/:journeyId" },
+
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

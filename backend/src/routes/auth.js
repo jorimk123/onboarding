@@ -162,6 +162,88 @@ router.post('/accept-invite', async (req, res) => {
   }
 });
 
+// ── GET /auth/journey-link/:journeyId ─────────────────────────────
+// Public — powers the client-portal self-serve signup page for a journey's
+// standing share link (not a single-use invite token; safe to post publicly
+// on a website, always valid, reusable by any number of people).
+router.get('/journey-link/:journeyId', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT j.id, j.name AS journey_name, j.archived_at,
+              b.name AS business_name, b.logo_url AS business_logo_url, b.accent_color AS business_accent_color
+       FROM journeys j JOIN businesses b ON b.id = j.business_id
+       WHERE j.id = $1`,
+      [req.params.journeyId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'This signup link is no longer valid.' });
+    const j = rows[0];
+    if (j.archived_at) return res.status(410).json({ error: 'This journey is no longer accepting signups.' });
+    res.json(j);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── POST /auth/register-client ────────────────────────────────────
+// Public self-serve signup tied to a journey's standing share link — creates
+// a new client account (in the journey's business) and assigns the journey
+// immediately, without an admin having to send an individual email invite.
+router.post('/register-client', async (req, res) => {
+  const { journeyId, name, email, password } = req.body;
+  if (!journeyId || !name || !email || !password) {
+    return res.status(400).json({ error: 'journeyId, name, email and password are required' });
+  }
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: jRows } = await client.query('SELECT * FROM journeys WHERE id=$1 FOR SHARE', [journeyId]);
+    if (!jRows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'This signup link is no longer valid.' }); }
+    const journey = jRows[0];
+    if (journey.archived_at) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'This journey is no longer accepting signups.' }); }
+
+    const hash = await bcrypt.hash(password, 10);
+    const { rows: uRows } = await client.query(
+      `INSERT INTO users (business_id, email, password, name, role) VALUES ($1,$2,$3,$4,'client')
+       RETURNING id,email,name,role,business_id,created_at`,
+      [journey.business_id, email.toLowerCase().trim(), hash, name]
+    );
+    const user = uRows[0];
+    await client.query(
+      `INSERT INTO client_journeys (client_id,journey_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [user.id, journey.id]
+    );
+    await client.query('COMMIT');
+
+    dispatch('client.registered', { client: { id: user.id, email: user.email, name: user.name } }, journey.business_id).catch(console.error);
+    dispatch('client.journey_assigned', {
+      client: { id: user.id, email: user.email, name: user.name },
+      journey: { id: journey.id, name: journey.name },
+    }, journey.business_id).catch(console.error);
+    sendWelcomeEmail({ to: user.email, name: user.name, journeyName: journey.name }).catch(console.error);
+
+    const { rows: dsTaskRows } = await pool.query(
+      `SELECT t.* FROM tasks t JOIN sections s ON t.section_id=s.id
+       WHERE s.journey_id=$1 AND t.docuseal_template_id IS NOT NULL AND t.docuseal_trigger='assignment'`,
+      [journey.id]
+    );
+    for (const task of dsTaskRows) {
+      sendDocument({ client: user, task, journeyId: journey.id }).catch(console.error);
+    }
+
+    const jwtToken = sign(user);
+    res.status(201).json({ token: jwtToken, user });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23505') { // unique_violation — email already taken
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password are required' });

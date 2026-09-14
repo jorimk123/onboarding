@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, Link } from 'react-router-dom';
 import './index.css';
 import { api } from './api/client';
 import DashboardPage from './pages/Dashboard';
@@ -34,9 +34,15 @@ function AuthProvider({ children }) {
     if (user.business) localStorage.setItem('crm_last_business', JSON.stringify(user.business));
     setUser(user); return user;
   };
+  const registerForJourney = async (body) => {
+    const { token, user } = await api.registerForJourney(body);
+    localStorage.setItem('crm_client_token', token);
+    if (user.business) localStorage.setItem('crm_last_business', JSON.stringify(user.business));
+    setUser(user); return user;
+  };
   const logout = () => { localStorage.removeItem('crm_client_token'); setUser(null); };
   if (loading) return <div className="spinner" />;
-  return <AuthCtx.Provider value={{ user, login, acceptInvite, logout }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, login, acceptInvite, registerForJourney, logout }}>{children}</AuthCtx.Provider>;
 }
 
 function ToastProvider({ children }) {
@@ -125,6 +131,50 @@ function AcceptInvitePage() {
   );
 }
 
+function JoinJourneyPage() {
+  const { registerForJourney } = useAuth(); const nav = useNavigate();
+  const { journeyId } = useParams();
+  const [info, setInfo] = useState(null);
+  const [loadErr, setLoadErr] = useState('');
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [err, setErr] = useState(''); const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.getJourneyLink(journeyId).then(setInfo).catch(e => setLoadErr(e.message));
+  }, [journeyId]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (form.password.length < 8) { setErr('Password must be at least 8 characters'); return; }
+    setErr(''); setLoading(true);
+    try { await registerForJourney({ journeyId, ...form }); nav('/'); }
+    catch (e) { setErr(e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <AuthLayout business={info ? { name: info.business_name, logo_url: info.business_logo_url } : null}>
+      <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>{info ? `Get started with ${info.business_name}` : 'Get started'}</div>
+      {info && <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Create your account to begin "{info.journey_name}".</div>}
+      {loadErr ? (
+        <div className="form-error">{loadErr}</div>
+      ) : !info ? (
+        <div className="spinner" />
+      ) : (
+        <form onSubmit={submit} style={{ marginTop: 14 }}>
+          <div className="form-group"><label>Full name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Jane Smith" autoFocus /></div>
+          <div className="form-group"><label>Email</label><input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required placeholder="jane@email.com" /></div>
+          <div className="form-group"><label>Password</label><input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required placeholder="At least 8 characters" /></div>
+          {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
+          <button className="btn btn-primary btn-full" disabled={loading}>{loading ? 'Creating…' : 'Get started'}</button>
+        </form>
+      )}
+      <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--text2)' }}>
+        Already have an account? <Link to="/login" style={{ color: 'var(--teal)', fontWeight: 500 }}>Sign in</Link>
+      </div>
+    </AuthLayout>
+  );
+}
+
 function LoginPage() {
   const { login } = useAuth(); const nav = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
@@ -148,6 +198,9 @@ function LoginPage() {
       </div>
       <div style={{ textAlign: 'center', marginTop: 10, fontSize: 13, color: 'var(--text2)' }}>
         No account yet? You'll need an invite link from your onboarding contact.
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text2)' }}>
+        Are you an admin? <a href="https://www.easyonboardings.com/admin" style={{ color: 'var(--teal)', fontWeight: 500 }}>Login here</a>
       </div>
     </AuthLayout>
   );
@@ -244,6 +297,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <ToastProvider>
         <Routes>
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
+          <Route path="/join/:journeyId" element={<JoinJourneyPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />

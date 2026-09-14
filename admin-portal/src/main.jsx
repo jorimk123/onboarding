@@ -435,6 +435,7 @@ function ShareJourneyModal({ journey, onClose }) {
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [link, setLink] = useState('');
+  const signupLink = `https://www.easyonboardings.com/join/${journey.id}`;
 
   const submit = async (e) => {
     e.preventDefault(); setSaving(true);
@@ -449,6 +450,19 @@ function ShareJourneyModal({ journey, onClose }) {
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title">Share "{journey.name}"</div>
+
+        <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--hairline)' }}>
+          <label>Signup link</label>
+          <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+            Always active — post this anywhere (your website, social, etc.) and anyone can sign themselves up for "{journey.name}".
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div className="code" style={{ flex: 1, display: 'flex', alignItems: 'center', wordBreak: 'break-all', padding: 10 }}>{signupLink}</div>
+            <button type="button" className="btn btn-secondary btn-sm" style={{ flexShrink: 0 }} onClick={() => { navigator.clipboard.writeText(signupLink); toast('Link copied'); }}>Copy</button>
+          </div>
+        </div>
+
+        <label style={{ marginBottom: 8, display: 'block' }}>Or invite someone by email</label>
         {!link ? (
           <form onSubmit={submit}>
             <div className="form-group">
@@ -633,8 +647,13 @@ export function JourneyModal({ onClose, onSave, initial }) {
   );
 }
 
+// Served both at the site root (admin.easyonboardings.com) and proxied under
+// www.easyonboardings.com/admin/* — detect which one we're on at runtime so
+// react-router's internal route matching lines up with the real browser URL.
+const routerBasename = window.location.pathname.startsWith('/admin') ? '/admin' : '';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>
+  <BrowserRouter basename={routerBasename}>
     <AuthProvider>
       <ToastProvider>
         <Routes>
