@@ -50,6 +50,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token) WHERE reset_token IS NOT NULL;
 
+-- Archiving a client hides them from the default People list without
+-- deleting their data (journeys/responses/documents all stay intact).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
 -- ── Invites ──────────────────────────────────────────────────
 -- Admins invite other admins (owner only) or clients (owner/admin) via a
 -- unique token link. Client invites can optionally pre-assign a journey.

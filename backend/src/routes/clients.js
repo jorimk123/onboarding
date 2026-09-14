@@ -7,8 +7,9 @@ const { sendDocument } = require('../services/docuseal');
 
 router.get('/', auth('admin'), async (req, res) => {
   try {
+    const showArchived = req.query.archived === 'true';
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.company, u.created_at,
+      SELECT u.id, u.email, u.name, u.company, u.created_at, u.archived_at,
         COALESCE(json_agg(
           json_build_object(
             'id', cj.id, 'journey_id', cj.journey_id, 'journey_name', j.name,
@@ -20,7 +21,8 @@ router.get('/', auth('admin'), async (req, res) => {
       FROM users u
       LEFT JOIN client_journeys cj ON cj.client_id=u.id
       LEFT JOIN journeys j ON cj.journey_id=j.id
-      WHERE u.role='client' AND u.business_id=$1 GROUP BY u.id ORDER BY u.created_at DESC`, [req.user.business_id]);
+      WHERE u.role='client' AND u.business_id=$1 AND u.archived_at IS ${showArchived ? 'NOT NULL' : 'NULL'}
+      GROUP BY u.id ORDER BY u.created_at DESC`, [req.user.business_id]);
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -35,7 +37,8 @@ router.get('/analytics/overview', auth(['owner', 'admin']), async (req, res) => 
     const countInProgress = async (asOf) => {
       const { rows } = await pool.query(
         `SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id
-         WHERE j.business_id=$1 AND cj.assigned_at <= $2
+         JOIN users u ON u.id=cj.client_id
+         WHERE j.business_id=$1 AND cj.assigned_at <= $2 AND u.archived_at IS NULL
            AND (cj.completed_at IS NULL OR cj.completed_at > $2)
            AND (cj.archived_at IS NULL OR cj.archived_at > $2)`, [bizId, asOf]
       );
@@ -52,7 +55,8 @@ router.get('/analytics/overview', auth(['owner', 'admin']), async (req, res) => 
       const sevenBefore = new Date(asOf.getTime() - 7 * 86400000);
       const { rows } = await pool.query(
         `SELECT COUNT(*) FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id
-         WHERE j.business_id=$1 AND cj.assigned_at <= $3 AND cj.assigned_at < $2
+         JOIN users u ON u.id=cj.client_id
+         WHERE j.business_id=$1 AND cj.assigned_at <= $3 AND cj.assigned_at < $2 AND u.archived_at IS NULL
            AND (cj.completed_at IS NULL OR cj.completed_at > $3)
            AND (cj.archived_at IS NULL OR cj.archived_at > $3)
            AND NOT EXISTS (
@@ -78,7 +82,7 @@ router.get('/analytics/overview', auth(['owner', 'admin']), async (req, res) => 
     ]);
 
     const { rows: totalClients } = await pool.query(
-      `SELECT COUNT(*) FROM users WHERE business_id=$1 AND role='client'`, [bizId]
+      `SELECT COUNT(*) FROM users WHERE business_id=$1 AND role='client' AND archived_at IS NULL`, [bizId]
     );
     const totalCap = Math.max(1, Number(totalClients[0].count));
 
@@ -104,7 +108,7 @@ router.get('/analytics/overview', auth(['owner', 'admin']), async (req, res) => 
     const { rows: stalledList } = await pool.query(
       `SELECT u.id AS client_id, u.name, j.name AS journey_name, cj.assigned_at
        FROM client_journeys cj JOIN journeys j ON j.id=cj.journey_id JOIN users u ON u.id=cj.client_id
-       WHERE j.business_id=$1 AND cj.completed_at IS NULL AND cj.archived_at IS NULL
+       WHERE j.business_id=$1 AND cj.completed_at IS NULL AND cj.archived_at IS NULL AND u.archived_at IS NULL
          AND cj.assigned_at < $2
          AND NOT EXISTS (
            SELECT 1 FROM task_completions tc JOIN tasks t ON t.id=tc.task_id JOIN sections s ON s.id=t.section_id
@@ -293,6 +297,31 @@ router.get('/:clientId/profile', auth('admin'), async (req, res) => {
     }
 
     res.json({ client: cRows[0], contact, uploads, signed });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// POST /clients/:clientId/archive — hide a person from the default People
+// list without deleting anything. Their journeys, responses, and documents
+// all stay exactly as they are; unarchiving brings them right back.
+router.post('/:clientId/archive', auth('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET archived_at=NOW() WHERE id=$1 AND role='client' AND business_id=$2 RETURNING id, archived_at`,
+      [req.params.clientId, req.user.business_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Client not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/:clientId/unarchive', auth('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET archived_at=NULL WHERE id=$1 AND role='client' AND business_id=$2 RETURNING id, archived_at`,
+      [req.params.clientId, req.user.business_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Client not found' });
+    res.json(rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

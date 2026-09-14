@@ -11,15 +11,16 @@ export default function ClientsPage() {
   const [assignModal, setAssignModal] = useState(null);
   const [showInvite, setShowInvite] = useState(false);
   const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const toast = useToast();
   const nav = useNavigate();
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getClients(), api.getJourneys(), api.getInvites('client')])
+    Promise.all([api.getClients(showArchived), api.getJourneys(), api.getInvites('client')])
       .then(([c, j, i]) => { setClients(c); setJourneys(j); setInvites(i); }).finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [showArchived]);
 
   const unassign = async (cid, jid, jname) => {
     if (!confirm(`Remove "${jname}"?`)) return;
@@ -30,6 +31,15 @@ export default function ClientsPage() {
     try { await api.revokeInvite(id); toast('Invite revoked'); load(); } catch (e) { toast(e.message, 'error'); }
   };
 
+  const archive = async (client) => {
+    if (!confirm(`Archive ${client.name}? They'll be hidden from your People list, but nothing is deleted — you can unarchive them anytime.`)) return;
+    try { await api.archiveClient(client.id); toast('Archived'); load(); } catch (e) { toast(e.message, 'error'); }
+  };
+
+  const unarchive = async (client) => {
+    try { await api.unarchiveClient(client.id); toast('Unarchived'); load(); } catch (e) { toast(e.message, 'error'); }
+  };
+
   const filtered = clients.filter(c =>
     [c.name, c.email, c.company || ''].some(v => v.toLowerCase().includes(search.toLowerCase()))
   );
@@ -37,10 +47,17 @@ export default function ClientsPage() {
   return (
     <div className="page" style={{ paddingTop: 0 }}>
       <div className="page-header">
-        <div style={{ color: 'var(--text2)', fontSize: 13 }}>{clients.length} registered</div>
-        <button className="btn btn-primary" onClick={() => setShowInvite(true)}>+ Invite client</button>
+        <div style={{ color: 'var(--text2)', fontSize: 13 }}>{clients.length} {showArchived ? 'archived' : 'registered'}</div>
+        {!showArchived && <button className="btn btn-primary" onClick={() => setShowInvite(true)}>+ Invite client</button>}
       </div>
-      <input placeholder="Search people…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 340, marginBottom: 16 }} />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+        <input placeholder="Search people…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 340 }} />
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', borderRadius: 'var(--r)', padding: 3 }}>
+          <button className={`btn btn-sm ${!showArchived ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setShowArchived(false)}>Active</button>
+          <button className={`btn btn-sm ${showArchived ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setShowArchived(true)}>Archived</button>
+        </div>
+      </div>
 
       {invites.length > 0 && (
         <div className="card" style={{ padding: 0, marginBottom: 20 }}>
@@ -63,7 +80,7 @@ export default function ClientsPage() {
       )}
 
       {loading ? <div className="spinner" /> : filtered.length === 0 ? (
-        <div className="empty"><div className="empty-icon">👥</div><p>{search ? 'No matches' : 'No clients yet'}</p></div>
+        <div className="empty"><div className="empty-icon">👥</div><p>{search ? 'No matches' : showArchived ? 'No archived people' : 'No clients yet'}</p></div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filtered.map(client => (
@@ -79,7 +96,14 @@ export default function ClientsPage() {
                     {client.company && <div style={{ color: 'var(--text3)', fontSize: 12 }}>{client.company}</div>}
                   </div>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); setAssignModal(client); }}>+ Assign journey</button>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {!showArchived && <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); setAssignModal(client); }}>+ Assign journey</button>}
+                  {showArchived ? (
+                    <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); unarchive(client); }}>Unarchive</button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={e => { e.stopPropagation(); archive(client); }}>Archive</button>
+                  )}
+                </div>
               </div>
 
               {client.journeys?.length > 0 && (

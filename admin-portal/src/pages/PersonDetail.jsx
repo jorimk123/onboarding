@@ -122,8 +122,11 @@ export default function PersonDetailPage() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.getClients(), api.getJourneys(), api.getClientProfile(id).catch(() => null)])
-      .then(([clients, js, prof]) => {
+    // A person might be archived, so look in both lists rather than assume
+    // they're in the default (active) one.
+    Promise.all([api.getClients(false), api.getClients(true), api.getJourneys(), api.getClientProfile(id).catch(() => null)])
+      .then(([active, archived, js, prof]) => {
+        const clients = [...active, ...archived];
         setClient(clients.find(c => String(c.id) === String(id)) || null);
         setJourneys(js);
         setProfile(prof);
@@ -131,6 +134,15 @@ export default function PersonDetailPage() {
       .finally(() => setLoading(false));
   };
   useEffect(load, [id]);
+
+  const archive = async () => {
+    if (!confirm(`Archive ${client.name}? They'll be hidden from your People list, but nothing is deleted — you can unarchive them anytime.`)) return;
+    try { await api.archiveClient(id); toast('Archived'); load(); } catch (e) { toast(e.message, 'error'); }
+  };
+
+  const unarchive = async () => {
+    try { await api.unarchiveClient(id); toast('Unarchived'); load(); } catch (e) { toast(e.message, 'error'); }
+  };
 
   const unassign = async (jid, jname) => {
     if (!confirm(`Remove "${jname}"?`)) return;
@@ -156,7 +168,14 @@ export default function PersonDetailPage() {
 
   return (
     <div className="page" style={{ paddingTop: 0 }}>
-      <button className="btn btn-ghost btn-sm" onClick={() => nav('/clients')} style={{ marginBottom: 12 }}>← Back to People</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => nav('/clients')}>← Back to People</button>
+        {client.archived_at ? (
+          <button className="btn btn-secondary btn-sm" onClick={unarchive}>Unarchive person</button>
+        ) : (
+          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={archive}>Archive person</button>
+        )}
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -164,7 +183,10 @@ export default function PersonDetailPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(150deg,#dbe1ff,#b9c4ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#3a4270', flexShrink: 0 }}>{initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)' }}>{client.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)' }}>{client.name}</div>
+                  {client.archived_at && <span className="badge badge-gray">Archived</span>}
+                </div>
                 <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 2 }}>{client.email}{client.company ? ` · ${client.company}` : ''}</div>
               </div>
               {totalTasks > 0 && (
