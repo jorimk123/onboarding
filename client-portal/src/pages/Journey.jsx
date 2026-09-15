@@ -203,7 +203,7 @@ function QuizRunner({ task, answers, onAnswer, onFinish }) {
   const [qi, setQi] = useState(0);
   const q = questions[qi];
   if (!q) return null;
-  const answered = q.multi ? Array.isArray(answers[q.id]) && answers[q.id].length > 0 : answers[q.id] != null;
+  const answered = q.required === false || (q.multi ? Array.isArray(answers[q.id]) && answers[q.id].length > 0 : answers[q.id] != null);
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', marginBottom: 10 }}>Question {qi + 1} of {questions.length}</div>
@@ -250,11 +250,24 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
   });
 
   if (isQuizStep(task)) {
+    if (task.completed) {
+      return (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-dark)' }}>✓ Submitted</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => onUncomplete(task.id)}>Mark as not done</button>
+          </div>
+        </div>
+      );
+    }
     return (
-      <QuizRunner task={task} answers={answers} onAnswer={save} onFinish={async () => {
-        setBusy(true);
-        try { await onComplete(task.id); toast('Quiz submitted ✓'); } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
-      }} />
+      <div>
+        <QuizRunner task={task} answers={answers} onAnswer={save} onFinish={async () => {
+          setBusy(true);
+          try { await onComplete(task.id); toast('Quiz submitted ✓'); } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+        }} />
+        <SkipLink task={task} onSkip={onSkip} toast={toast} />
+      </div>
     );
   }
 
