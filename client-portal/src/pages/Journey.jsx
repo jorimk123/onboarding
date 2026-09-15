@@ -278,8 +278,10 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
         {task.booking_url
           ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex' }}>Schedule a time →</a>
           : <div style={{ fontSize: 13, color: 'var(--text3)' }}>No booking link has been set up yet.</div>}
-        {!task.completed && (
+        {!task.completed ? (
           <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onComplete(task.id)}>I've scheduled it</button>
+        ) : (
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onUncomplete(task.id)}>Mark as not done</button>
         )}
         <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
@@ -293,8 +295,10 @@ function TaskBody({ task, onSaveField, onComplete, onUncomplete, onSkip, toast }
         {task.booking_url
           ? <a href={task.booking_url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex' }}>Open link →</a>
           : <div style={{ fontSize: 13, color: 'var(--text3)' }}>No link has been set up yet.</div>}
-        {!task.completed && (
+        {!task.completed ? (
           <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onComplete(task.id)}>I've completed it</button>
+        ) : (
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 10 }} onClick={() => onUncomplete(task.id)}>Mark as not done</button>
         )}
         <SkipLink task={task} onSkip={onSkip} toast={toast} />
       </div>
